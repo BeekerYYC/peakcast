@@ -34,11 +34,6 @@ export function parseLink(search: string): LinkTarget {
   }
 }
 
-/** Short deep link for a saved spot (home-screen icons, Shortcuts). */
-export function spotPath(s: Spot): string {
-  return `/?spot=${encodeURIComponent(s.slug)}`
-}
-
 /** Self-contained link that works on someone else's device. */
 export function shareUrl(s: Spot, origin = location.origin): string {
   const p = new URLSearchParams({
@@ -52,9 +47,13 @@ export function shareUrl(s: Spot, origin = location.origin): string {
   return `${origin}/?${p}`
 }
 
-/** Keep the address bar in sync with the spot on screen. */
-export function syncUrl(s: Spot, isTemp: boolean): void {
-  const target = isTemp ? new URL(shareUrl(s)).search : spotPath(s).slice(1)
+/**
+ * Keep the address bar in sync with the spot on screen. The URL is the full
+ * self-contained link, so "Add to Home Screen", bookmarks and Shortcuts work
+ * even where the spot isn't saved (e.g. a fresh iOS home-screen container).
+ */
+export function syncUrl(s: Spot): void {
+  const target = new URL(shareUrl(s)).search
   if (location.search !== target) history.replaceState(null, '', `/${target}`)
 }
 
@@ -62,19 +61,22 @@ export function syncUrl(s: Spot, isTemp: boolean): void {
  * Apply the startup URL to the spot store. Called once in main.tsx before the
  * first render so URL syncing can never overwrite it.
  */
-export function applyStartupLink(search = location.search): void {
+export function applyStartupLink(search = location.search, standalone = false): void {
   const { slug, shared } = parseLink(search)
   const st = useSpots.getState()
   if (!shared) {
     if (slug && st.spots.some((s) => s.slug === slug)) st.setCurrent(slug)
     return
   }
-  const same = st.spots.find(
-    (s) =>
-      Math.abs(s.lat - shared.lat) < 1e-4 &&
-      Math.abs(s.lon - shared.lon) < 1e-4 &&
-      (s.elevation ?? null) === (shared.elevation ?? null),
-  )
+  const near = (s: Spot) =>
+    Math.abs(s.lat - shared.lat) < 1e-4 && Math.abs(s.lon - shared.lon) < 1e-4
+  // Same slug at the same place (elevation may have been edited since), else
+  // any saved spot at the same place and elevation.
+  const same =
+    st.spots.find((s) => s.slug === shared.slug && near(s)) ??
+    st.spots.find((s) => near(s) && (s.elevation ?? null) === (shared.elevation ?? null))
   if (same) st.setCurrent(same.slug)
+  // A home-screen icon for a spot: just save it, no "Save spot" banner.
+  else if (standalone) st.add(shared)
   else st.setTemp(shared)
 }

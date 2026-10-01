@@ -23,9 +23,9 @@ interface Props {
   showX: boolean
 }
 
-/** Smallest tick step (h) that leaves ~36 px per label. */
+/** Smallest tick step (h) that leaves ~32 px per label. */
 function tickStep(hours: number, plotPx: number): number {
-  const fit = Math.max(2, Math.floor(plotPx / 36))
+  const fit = Math.max(2, Math.floor(plotPx / 32))
   for (const st of [3, 6, 12, 24, 48, 72, 96]) if (hours / st <= fit) return st
   return 96
 }

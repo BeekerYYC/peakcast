@@ -26,3 +26,27 @@ describe('uniqueSlug', () => {
     expect(uniqueSlug('Lac Beauvert (Jasper)', new Set())).toBe('lac-beauvert-jasper')
   })
 })
+
+import { applyStartupLink } from '../src/lib/deeplink'
+import { useSpots } from '../src/state/spots'
+import { SEED_SPOTS } from '../src/config/spots'
+
+describe('applyStartupLink', () => {
+  const reset = () => useSpots.setState({ spots: [...SEED_SPOTS], current: 'calgary', temp: null })
+  it('selects a saved spot from its full link', () => {
+    reset()
+    applyStartupLink('?spot=kananaskis-village&name=Kananaskis%20Village&lat=50.91598&lon=-115.14156')
+    expect(useSpots.getState().current).toBe('kananaskis-village')
+    expect(useSpots.getState().temp).toBeNull()
+  })
+  it('opens unknown spots as temporary in the browser, saves them when installed', () => {
+    reset()
+    const link = '?spot=mt-allan&name=Mt%20Allan&lat=50.97&lon=-115.205&elev=2819'
+    applyStartupLink(link)
+    expect(useSpots.getState().temp?.name).toBe('Mt Allan')
+    reset()
+    applyStartupLink(link, true)
+    expect(useSpots.getState().spots.at(-1)?.elevation).toBe(2819)
+    expect(useSpots.getState().current).toBe('mt-allan')
+  })
+})

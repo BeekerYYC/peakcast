@@ -10,10 +10,12 @@ import { SpotEditor } from './components/SpotEditor'
 import { SpotPicker } from './components/SpotPicker'
 import { Toaster, useToast } from './components/Toast'
 import { prefetch, useForecast } from './hooks/useForecast'
+import { useOnline } from './hooks/useOnline'
 import { syncUrl } from './lib/deeplink'
 import { ago } from './lib/format'
 import { injectModelColors } from './lib/modelCss'
 import { shareSpot } from './lib/share'
+import { applySpotManifest } from './lib/pwa'
 import { useResolvedTheme } from './lib/theme'
 import { useScrub } from './state/scrub'
 import { useSpots } from './state/spots'
@@ -46,10 +48,12 @@ export default function App() {
   const [settings, setSettings] = useState(false)
 
   const fc = useForecast(spot ?? null)
+  const online = useOnline()
   const elevation = Object.values(fc.data)[0]?.series.elevation
 
   useEffect(() => {
-    if (spot) syncUrl(spot, !!temp)
+    if (spot) syncUrl(spot)
+    applySpotManifest(spot)
     document.title = spot ? `${spot.name} · Peakcast` : 'Peakcast'
   }, [spot, temp])
 
@@ -106,7 +110,7 @@ export default function App() {
   )
 
   if (!spot) return null
-  const offline = fc.error === 'Offline'
+  const offline = !online || fc.error === 'Offline'
 
   return (
     <div className="pt-safe px-safe mx-auto min-h-full max-w-[640px] pb-[calc(env(safe-area-inset-bottom)+72px)]">

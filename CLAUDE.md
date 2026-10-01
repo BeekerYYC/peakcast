@@ -129,8 +129,10 @@ src/
   routes/ (none)         single-page; URL state via query params
 ```
 
-- **Fetch strategy**: one forecast request per (spot, horizon) with that tab's
-  models + needed vars (and companions). GEPS is a separate ensemble request.
+- **Fetch strategy**: per spot, *all* visible models are fetched at once in up
+  to three requests: short-range forecast (≤96 h models), long-range forecast,
+  and the GEPS ensemble. Tab switches are therefore instant and every horizon
+  is available offline. Results are cached per (spot, model).
   Meta.json is fetched per model, cached ~10 min. Stale-while-revalidate: render
   the cached data instantly, refresh in the background, and show "Fetched X ago".
   Prefetch adjacent spots after the current one renders.
@@ -148,10 +150,19 @@ src/
   Forecast data is cached by the app (IndexedDB), not Workbox, so the
   "fetched at" label stays accurate. Map tiles use Workbox runtime cache
   (bounded).
-- **iOS home-screen per spot**: iOS may use the manifest `start_url` instead of
-  the current URL when adding to the home screen. Mitigation: swap in a
-  per-spot manifest (blob URL with `start_url=/?spot=<slug>`) on the current
-  spot. Verify on device in M3/M5.
+- **iOS home-screen per spot**: the address bar always holds the full,
+  self-contained spot link (`?spot=&name=&lat=&lon=[&elev=]`). On iOS
+  (`navigator.standalone` defined) the manifest `<link>` is swapped for a
+  data-URL manifest whose `start_url` is that link (`src/lib/pwa.ts`), so
+  "Add to Home Screen" works whichever URL iOS uses. Each iOS home-screen app
+  may get its own storage, so a launch in standalone mode auto-saves an
+  unknown spot instead of showing the "Save spot" banner.
+- **Startup link**: `applyStartupLink()` runs in `main.tsx` before the first
+  render (React StrictMode double effects would otherwise let URL syncing
+  clobber it).
+- **MapLibre v6** has named exports only (`import * as maplibregl`) and needs
+  `setWorkerUrl()` with Vite's `?worker&url` import of
+  `maplibre-gl/dist/maplibre-gl-worker.mjs`.
 
 ### Charting library: uPlot
 Chosen for dense multi-series time series on phones. ~50 KB and canvas
@@ -164,7 +175,7 @@ ECharts was rejected for size (~1 MB), Chart.js for perf with many points
 and weaker cursor sync.
 
 ### Tech stack
-Vite + React + TypeScript (strict) + Tailwind CSS · uPlot · MapLibre GL ·
+Vite 8 + React 19 + TypeScript (strict) + Tailwind CSS 4 · uPlot · MapLibre GL 6 ·
 zustand · idb-keyval · motion (framer-motion) for transitions ·
 vite-plugin-pwa · Vitest (unit) · Playwright (smoke at iPhone viewport,
 Chromium at `/opt/pw-browsers` in the cloud env) · deployed to Vercel.
@@ -179,24 +190,28 @@ Chromium at `/opt/pw-browsers` in the cloud env) · deployed to Vercel.
 - Pure data functions (`src/data/`) have no React imports and are unit tested.
 - Never treat missing values as 0. Use `null` → chart gaps.
 - Keep requests polite: no polling, refresh on focus only if data > 15 min old.
-- Before each commit: `npm run typecheck && npm run lint && npm test && npm run build`.
+- Before each commit: `npm run check` (typecheck, lint, tests, build).
+- Visual check: `npm run dev`, then `npm run shot -- <url> <out.png> [--dark]
+  [--viewport]` renders an iPhone 15 viewport via Playwright (API calls are
+  proxied through Node). `SHOT_ACTIONS` env can script clicks before capture.
+- Refresh API fixtures: `npm run fixtures`. App icons: `npx tsx scripts/icons.ts`.
 - One commit (or a few) at the end of each milestone; message prefixed `M<n>:`.
 
 ## Milestones
 
 0. **Spec**: this file. ✅
-1. **Data layer + model registry**: Vite/TS/Tailwind scaffold, registry with
+1. **Data layer + model registry**: ✅ Vite/TS/Tailwind scaffold, registry with
    verified IDs, request builders, normalizer, derived freezing level /
    rain / ensemble stats / daily summary, meta.json freshness, IndexedDB cache,
    unit tests against recorded fixtures.
-2. **Single spot, 48h, multi-model charts**: uPlot chart stack, shared
+2. **Single spot, 48h, multi-model charts**: ✅ uPlot chart stack, shared
    scrubber + tooltip, model chips, at-a-glance row, freshness labels.
-3. **Saved spots + switching + deep links + sharing**: spot store, search, current
+3. **Saved spots + switching + deep links + sharing**: ✅ spot store, search, current
    location, MapLibre long-press pin, reorder/delete/rename, elevation override,
    swipe pager + picker, `?spot=` deep links, share links, last-viewed restore.
-4. **Remaining horizons + GEPS**: 3.5d/10d/16d tabs, ECMWF IFS + companion FZL,
+4. **Remaining horizons + GEPS**: ✅ 3.5d/10d/16d tabs, ECMWF IFS + companion FZL,
    GEPS mean + spread band, cross-horizon toggles.
-5. **PWA / offline polish**: manifest, icons, service worker, offline labelling,
+5. **PWA / offline polish**: ✅ manifest, icons, service worker, offline labelling,
    safe areas, per-spot home-screen manifests, Vercel deploy.
 6. **Visual design pass**: typography, motion, dark mode tuning, empty/error
    states, haptics-feel micro-interactions.
