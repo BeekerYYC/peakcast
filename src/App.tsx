@@ -8,9 +8,11 @@ import { IconChevronDown, IconMap, IconRefresh, IconShare, IconSettings, IconWif
 import { Sheet } from './components/Sheet'
 import { SpotEditor } from './components/SpotEditor'
 import { SpotPicker } from './components/SpotPicker'
-import { Toaster, useToast } from './components/Toast'
+import { Toaster } from './components/Toast'
+import { useToast } from './state/toast'
 import { prefetch, useForecast } from './hooks/useForecast'
 import { useOnline } from './hooks/useOnline'
+import { PULL_TRIGGER, usePullToRefresh } from './hooks/usePullToRefresh'
 import { syncUrl } from './lib/deeplink'
 import { ago } from './lib/format'
 import { injectModelColors } from './lib/modelCss'
@@ -49,6 +51,7 @@ export default function App() {
 
   const fc = useForecast(spot ?? null)
   const online = useOnline()
+  const pull = usePullToRefresh(fc.refresh)
   const elevation = Object.values(fc.data)[0]?.series.elevation
 
   useEffect(() => {
@@ -114,6 +117,19 @@ export default function App() {
 
   return (
     <div className="pt-safe px-safe mx-auto min-h-full max-w-[640px] pb-[calc(env(safe-area-inset-bottom)+72px)]">
+      {pull > 4 && (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top)] z-20 flex justify-center"
+          style={{ transform: `translateY(${pull - 28}px)` }}
+        >
+          <span
+            className="flex size-8 items-center justify-center rounded-full bg-surface text-accent shadow-md"
+            style={{ transform: `rotate(${pull * 3}deg)`, opacity: Math.min(1, pull / PULL_TRIGGER) }}
+          >
+            <IconRefresh size={16} />
+          </span>
+        </div>
+      )}
       <div className="flex flex-col gap-3 px-4">
         <motion.header
           className="flex touch-pan-y flex-col pt-2"
@@ -204,7 +220,20 @@ export default function App() {
         )}
 
         <HorizonTabs />
-        <ForecastView key={spot.slug} spot={spot} data={fc.data} loading={fc.loading} />
+        <motion.div
+          key={spot.slug + (temp ? ':t' : '')}
+          initial={{ opacity: 0, x: dir * 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 40 }}
+        >
+          <ForecastView
+            spot={spot}
+            data={fc.data}
+            loading={fc.loading}
+            error={fc.error}
+            onRetry={fc.refresh}
+          />
+        </motion.div>
         <Attribution />
       </div>
 

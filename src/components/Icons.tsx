@@ -120,13 +120,22 @@ export const IconWifiOff = (p: P) => (
 )
 
 /** Weather glyphs: two-tone, ink stroke with soft fills. */
-export function WxGlyph({ icon, size = 26 }: { icon: WxIcon; size?: number }) {
+export function WxGlyph({ icon, size = 26, night = false }: { icon: WxIcon; size?: number; night?: boolean }) {
   const sun = (
     <g stroke="#eda100" fill="#eda100" fillOpacity={0.25}>
       <circle cx="12" cy="12" r="4" />
       <path d="M12 3v1.8M12 19.2V21M3 12h1.8M19.2 12H21M5.6 5.6l1.3 1.3M17.1 17.1l1.3 1.3M5.6 18.4l1.3-1.3M17.1 6.9l1.3-1.3" fill="none" />
     </g>
   )
+  const moon = (
+    <path
+      d="M15.5 4.5a7.5 7.5 0 1 0 4 12.6A6.2 6.2 0 0 1 15.5 4.5Z"
+      stroke="#9085e9"
+      fill="#9085e9"
+      fillOpacity={0.22}
+    />
+  )
+  const celestial = night ? moon : sun
   const cloud = (dx = 0, dy = 0) => (
     <path
       transform={`translate(${dx} ${dy})`}
@@ -137,10 +146,10 @@ export function WxGlyph({ icon, size = 26 }: { icon: WxIcon; size?: number }) {
   )
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" className="text-ink-2" aria-hidden="true">
-      {icon === 'clear' && sun}
+      {icon === 'clear' && celestial}
       {icon === 'partly' && (
         <>
-          <g transform="translate(-3 -3) scale(0.85)">{sun}</g>
+          <g transform="translate(-3 -3) scale(0.85)">{celestial}</g>
           {cloud(1.5, 1)}
         </>
       )}

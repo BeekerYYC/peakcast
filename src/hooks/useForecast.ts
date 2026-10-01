@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { VISIBLE_MODELS } from '../config/models'
 import { spotKey } from '../data/cache'
 import { FRESH_MS, fetchModels, readAllCached } from '../data/forecast'
@@ -25,14 +25,18 @@ function isStale(d: Record<string, CachedModel>): boolean {
   return vals.some((v) => Date.now() - v!.fetchedAt > FRESH_MS)
 }
 
-async function load(spot: SpotQuery, force: boolean): Promise<Record<string, CachedModel>> {
+async function fromDb(spot: SpotQuery): Promise<Record<string, CachedModel>> {
   const k = spotKey(spot)
   let cur = mem.get(k)
   if (!cur) {
     cur = await readAllCached(spot, ALL_IDS)
     mem.set(k, cur)
   }
-  if (!force && !isStale(cur)) return cur
+  return cur
+}
+
+async function fromNetwork(spot: SpotQuery): Promise<Record<string, CachedModel>> {
+  const k = spotKey(spot)
   const pending = inflight.get(k)
   if (pending) return pending
   const p = fetchModels(spot, ALL_IDS)
@@ -48,50 +52,54 @@ async function load(spot: SpotQuery, force: boolean): Promise<Record<string, Cac
 
 /** Warm the cache for a spot (e.g. the neighbours in the pager). */
 export function prefetch(spot: SpotQuery): void {
-  void load(spot, false).catch(() => {})
+  void fromDb(spot)
+    .then((d) => (isStale(d) ? fromNetwork(spot) : d))
+    .catch(() => {})
+}
+
+interface Inner {
+  key: string
+  data: Record<string, CachedModel>
+  loading: boolean
+  error: string | null
 }
 
 export function useForecast(spot: SpotQuery | null): ForecastState {
-  const [data, setData] = useState<Record<string, CachedModel>>({})
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const k = spot ? spotKey(spot) : ''
+  const [inner, setInner] = useState<Inner>({ key: '', data: {}, loading: false, error: null })
   const [nonce, setNonce] = useState(0)
   const forceRef = useRef(false)
-  const k = spot ? spotKey(spot) : ''
+  const spotRef = useRef(spot)
+  useLayoutEffect(() => {
+    spotRef.current = spot
+  })
+
+  // State belongs to one spot; for a new spot fall back to the memory cache.
+  const state: Inner =
+    inner.key === k ? inner : { key: k, data: mem.get(k) ?? {}, loading: false, error: null }
 
   useEffect(() => {
-    if (!spot) return
+    const s = spotRef.current
+    if (!s) return
     let alive = true
     const force = forceRef.current
     forceRef.current = false
-    const cached = mem.get(k)
-    setData(cached ?? {})
-    setError(null)
+    const patch = (p: Partial<Inner>) => {
+      if (alive) setInner((prev) => ({ ...(prev.key === k ? prev : { key: k, data: {}, loading: false, error: null }), ...p }))
+    }
 
     void (async () => {
-      if (!cached) {
-        const fromDb = await readAllCached(spot, ALL_IDS)
-        if (!alive) return
-        mem.set(k, fromDb)
-        setData(fromDb)
-        if (!force && !isStale(fromDb)) return
-      } else if (!force && !isStale(cached)) {
-        return
-      }
-      setLoading(true)
+      const cached = await fromDb(s)
+      patch({ data: cached, error: null })
+      if (!force && !isStale(cached)) return
+      patch({ loading: true })
       try {
-        const d = await load(spot, force)
-        if (alive) setData(d)
+        patch({ data: await fromNetwork(s), loading: false })
       } catch (e) {
-        if (alive) {
-          setError(
-            typeof navigator !== 'undefined' && !navigator.onLine
-              ? 'Offline'
-              : ((e as Error).message ?? 'Network error'),
-          )
-        }
-      } finally {
-        if (alive) setLoading(false)
+        patch({
+          loading: false,
+          error: !navigator.onLine ? 'Offline' : ((e as Error).message ?? 'Network error'),
+        })
       }
     })()
     return () => {
@@ -102,7 +110,7 @@ export function useForecast(spot: SpotQuery | null): ForecastState {
   // Refresh when the app comes back to the foreground with stale data.
   useEffect(() => {
     const on = () => {
-      if (document.visibilityState === 'visible' && spot && isStale(mem.get(k) ?? {})) {
+      if (document.visibilityState === 'visible' && k && isStale(mem.get(k) ?? {})) {
         setNonce((n) => n + 1)
       }
     }
@@ -112,18 +120,18 @@ export function useForecast(spot: SpotQuery | null): ForecastState {
       document.removeEventListener('visibilitychange', on)
       window.removeEventListener('online', on)
     }
-  }, [k, spot])
+  }, [k])
 
   const refresh = useCallback(() => {
     forceRef.current = true
     setNonce((n) => n + 1)
-  }, [])
+  }, [setNonce])
 
-  const times = Object.values(data).map((d) => d.fetchedAt)
+  const times = Object.values(state.data).map((d) => d.fetchedAt)
   return {
-    data,
-    loading,
-    error,
+    data: state.data,
+    loading: state.loading,
+    error: state.error,
     fetchedAt: times.length ? Math.min(...times) : null,
     refresh,
   }

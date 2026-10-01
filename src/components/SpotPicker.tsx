@@ -1,11 +1,11 @@
 import { Reorder, useDragControls } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Spot } from '../config/spots'
 import { searchPlaces, type Place } from '../data/geocode'
 import { useSpots } from '../state/spots'
 import { IconCheck, IconEdit, IconGrip, IconLocate, IconMap, IconSearch } from './Icons'
 import { Sheet } from './Sheet'
-import { useToast } from './Toast'
+import { useToast } from '../state/toast'
 
 interface Props {
   open: boolean
@@ -56,44 +56,43 @@ function Row({ spot, onEdit, onPick }: { spot: Spot; onEdit: () => void; onPick:
 }
 
 export function SpotPicker({ open, onClose, onEdit, onMap }: Props) {
+  // The body unmounts when the sheet closes, which resets the search.
+  return (
+    <Sheet open={open} onClose={onClose} title="Spots">
+      <PickerBody onClose={onClose} onEdit={onEdit} onMap={onMap} />
+    </Sheet>
+  )
+}
+
+function PickerBody({ onClose, onEdit, onMap }: Omit<Props, 'open'>) {
   const spots = useSpots((s) => s.spots)
   const setCurrent = useSpots((s) => s.setCurrent)
   const setTemp = useSpots((s) => s.setTemp)
   const add = useSpots((s) => s.add)
   const toast = useToast((s) => s.show)
   const [q, setQ] = useState('')
-  const [results, setResults] = useState<Place[]>([])
-  const [searching, setSearching] = useState(false)
+  const [found, setFound] = useState<{ q: string; places: Place[] }>({ q: '', places: [] })
   const [locating, setLocating] = useState(false)
-  const abort = useRef<AbortController | null>(null)
+  const query = q.trim()
+  const results = query.length >= 2 && found.q === query ? found.places : []
+  const searching = query.length >= 2 && found.q !== query
 
   useEffect(() => {
-    if (!open) {
-      setQ('')
-      setResults([])
-    }
-  }, [open])
-
-  useEffect(() => {
-    abort.current?.abort()
-    if (q.trim().length < 2) {
-      setResults([])
-      return
-    }
+    if (query.length < 2) return
     const ac = new AbortController()
-    abort.current = ac
     const t = setTimeout(async () => {
-      setSearching(true)
       try {
-        setResults(await searchPlaces(q, ac.signal))
+        const places = await searchPlaces(query, ac.signal)
+        setFound({ q: query, places })
       } catch {
-        /* aborted or offline */
-      } finally {
-        if (!ac.signal.aborted) setSearching(false)
+        if (!ac.signal.aborted) setFound({ q: query, places: [] })
       }
     }, 250)
-    return () => clearTimeout(t)
-  }, [q])
+    return () => {
+      clearTimeout(t)
+      ac.abort()
+    }
+  }, [query])
 
   const pick = (slug: string) => {
     setTemp(null)
@@ -130,7 +129,7 @@ export function SpotPicker({ open, onClose, onEdit, onMap }: Props) {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="Spots">
+    <>
       <div className="px-4 pb-2">
         <label className="flex items-center gap-2 rounded-xl bg-surface-2 px-3">
           <IconSearch size={17} className="shrink-0 text-muted" />
@@ -202,6 +201,6 @@ export function SpotPicker({ open, onClose, onEdit, onMap }: Props) {
           </p>
         </>
       )}
-    </Sheet>
+    </>
   )
 }

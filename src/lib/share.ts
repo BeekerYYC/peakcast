@@ -1,5 +1,5 @@
 import type { Spot } from '../config/spots'
-import { useToast } from '../components/Toast'
+import { useToast } from '../state/toast'
 import { shareUrl } from './deeplink'
 
 /** iOS share sheet when available, otherwise copy the link. */

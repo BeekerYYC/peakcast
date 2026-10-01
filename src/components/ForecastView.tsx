@@ -1,3 +1,4 @@
+import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { HORIZONS_BY_ID, PAST_HOURS } from '../config/horizons'
 import type { Spot } from '../config/spots'
@@ -10,12 +11,15 @@ import { ChartCard } from './charts/ChartCard'
 import { CHARTS, type ChartCtx } from './charts/chartDefs'
 import { DailySummary } from './DailySummary'
 import { ModelChips } from './ModelChips'
+import { NowHero } from './NowHero'
 import { ScrubBar } from './ScrubBar'
 
 interface Props {
   spot: Spot
   data: Record<string, CachedModel>
   loading: boolean
+  error: string | null
+  onRetry: () => void
 }
 
 /** Re-render on the hour so "now" and the window advance. */
@@ -28,7 +32,7 @@ function useHourTick(): number {
   return h
 }
 
-export function ForecastView({ spot, data, loading }: Props) {
+export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
   const theme = useResolvedTheme()
   const horizonId = usePrefs((s) => s.horizon)
   const vis = usePrefs((s) => s.modelVis)
@@ -64,7 +68,14 @@ export function ForecastView({ spot, data, loading }: Props) {
     <div className="flex flex-col gap-3">
       <ModelChips horizon={horizonId} data={data} />
       {hasData ? (
-        <>
+        <motion.div
+          key={horizonId}
+          className="flex flex-col gap-3"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+        >
+          <NowHero models={models} tl={tl} />
           <DailySummary models={models} tl={tl} />
           <ScrubBar tl={tl} precipMode={precipMode} aggHours={aggHours} onPrecipMode={setPrecipMode} />
           <div className="flex flex-col gap-2.5">
@@ -72,15 +83,30 @@ export function ForecastView({ spot, data, loading }: Props) {
               <ChartCard key={def.id} def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX />
             ))}
           </div>
-        </>
+        </motion.div>
       ) : (
-        <EmptyState loading={loading} anyData={Object.keys(data).length > 0} />
+        <EmptyState
+          loading={loading}
+          anyData={Object.keys(data).length > 0}
+          error={error}
+          onRetry={onRetry}
+        />
       )}
     </div>
   )
 }
 
-function EmptyState({ loading, anyData }: { loading: boolean; anyData: boolean }) {
+function EmptyState({
+  loading,
+  anyData,
+  error,
+  onRetry,
+}: {
+  loading: boolean
+  anyData: boolean
+  error: string | null
+  onRetry: () => void
+}) {
   if (loading)
     return (
       <div className="flex flex-col gap-2.5" aria-busy="true">
@@ -94,8 +120,25 @@ function EmptyState({ loading, anyData }: { loading: boolean; anyData: boolean }
       </div>
     )
   return (
-    <p className="rounded-2xl bg-surface px-4 py-6 text-center text-[13px] text-ink-2 shadow-[0_0_0_1px_var(--hair)]">
-      {anyData ? 'Turn on a model above to see its forecast.' : 'No forecast loaded yet.'}
-    </p>
+    <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface px-4 py-8 text-center shadow-[0_0_0_1px_var(--hair)]">
+      <p className="text-[14px] text-ink-2">
+        {anyData
+          ? 'Turn on a model above to see its forecast.'
+          : error === 'Offline'
+            ? 'You are offline and this spot has no saved forecast yet.'
+            : error
+              ? `Couldn't load the forecast (${error}).`
+              : 'No forecast loaded yet.'}
+      </p>
+      {!anyData && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-full bg-accent px-4 py-1.5 text-[13px] font-semibold text-accent-ink active:scale-95"
+        >
+          Try again
+        </button>
+      )}
+    </div>
   )
 }

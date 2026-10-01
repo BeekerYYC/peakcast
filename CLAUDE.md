@@ -213,5 +213,5 @@ Chromium at `/opt/pw-browsers` in the cloud env) · deployed to Vercel.
    GEPS mean + spread band, cross-horizon toggles.
 5. **PWA / offline polish**: ✅ manifest, icons, service worker, offline labelling,
    safe areas, per-spot home-screen manifests, Vercel deploy.
-6. **Visual design pass**: typography, motion, dark mode tuning, empty/error
+6. **Visual design pass**: ✅ typography, motion, dark mode tuning, empty/error
    states, haptics-feel micro-interactions.

@@ -7,7 +7,7 @@ import type { Spot } from '../config/spots'
 import { fetchElevation } from '../data/elevation'
 import { useSpots } from '../state/spots'
 import { IconClose, IconMountain, IconPin } from './Icons'
-import { useToast } from './Toast'
+import { useToast } from '../state/toast'
 
 maplibregl.setWorkerUrl(workerUrl)
 

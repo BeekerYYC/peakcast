@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { Spot } from '../config/spots'
 import { fetchElevation } from '../data/elevation'
 import { shareSpot } from '../lib/share'
 import { useSpots } from '../state/spots'
@@ -12,37 +13,41 @@ interface Props {
 
 export function SpotEditor({ slug, onClose }: Props) {
   const spot = useSpots((s) => s.spots.find((x) => x.slug === slug))
+  // Keyed by spot so the form starts fresh for each one.
+  return spot ? <EditorSheet key={spot.slug} spot={spot} onClose={onClose} /> : <Sheet open={false} onClose={onClose}>{null}</Sheet>
+}
+
+function EditorSheet({ spot, onClose }: { spot: Spot; onClose: () => void }) {
   const update = useSpots((s) => s.update)
   const remove = useSpots((s) => s.remove)
   const count = useSpots((s) => s.spots.length)
-  const [name, setName] = useState('')
-  const [elev, setElev] = useState('')
+  const [name, setName] = useState(spot.name)
+  const [elev, setElev] = useState(spot.elevation != null ? String(spot.elevation) : '')
   const [terrain, setTerrain] = useState<number | null>(null)
   const [confirm, setConfirm] = useState(false)
+  const [open, setOpen] = useState(true)
 
   useEffect(() => {
-    if (!spot) return
-    setName(spot.name)
-    setElev(spot.elevation != null ? String(spot.elevation) : '')
-    setConfirm(false)
-    setTerrain(null)
-    void fetchElevation(spot.lat, spot.lon).then(setTerrain)
-    // Only when a different spot is opened.
-  }, [slug]) // eslint-disable-line
+    let alive = true
+    void fetchElevation(spot.lat, spot.lon).then((v) => alive && setTerrain(v))
+    return () => {
+      alive = false
+    }
+  }, [spot.lat, spot.lon])
 
   const save = () => {
-    if (!spot) return onClose()
     const e = elev.trim() === '' ? undefined : Number(elev)
     update(spot.slug, {
       name: name.trim() || spot.name,
       elevation: e != null && Number.isFinite(e) && e > -500 && e < 9000 ? Math.round(e) : undefined,
     })
+    setOpen(false)
     onClose()
   }
 
   return (
     <Sheet
-      open={!!spot}
+      open={open}
       onClose={save}
       title="Edit spot"
       action={
@@ -51,7 +56,7 @@ export function SpotEditor({ slug, onClose }: Props) {
         </button>
       }
     >
-      {spot && (
+      {
         <div className="flex flex-col gap-4 px-4 pb-4">
           <label className="flex flex-col gap-1.5">
             <span className="text-[12px] font-medium text-ink-2">Name</span>
@@ -114,7 +119,7 @@ export function SpotEditor({ slug, onClose }: Props) {
             </button>
           </div>
         </div>
-      )}
+      }
     </Sheet>
   )
 }

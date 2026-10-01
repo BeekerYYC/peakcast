@@ -35,7 +35,7 @@ await page.route(/open-meteo\.com|openfreemap|opentopomap/, async (route) => {
       body,
       headers: { 'content-type': r.headers.get('content-type') ?? 'application/json', 'access-control-allow-origin': '*' },
     })
-  } catch (e) {
+  } catch {
     await route.abort()
   }
 })

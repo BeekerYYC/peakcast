@@ -2,7 +2,7 @@ import { HORIZONS } from '../config/horizons'
 import { VISIBLE_MODELS } from '../config/models'
 import { usePrefs, type ThemePref } from '../state/prefs'
 import { Sheet } from './Sheet'
-import { useToast } from './Toast'
+import { useToast } from '../state/toast'
 
 export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const theme = usePrefs((s) => s.theme)
