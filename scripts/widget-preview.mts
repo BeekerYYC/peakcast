@@ -57,7 +57,6 @@ const result = await page.evaluate(async ({ code, family, param }) => {
   class ListWidget extends Stack { async presentMedium() {} }
   class DateFormatter { dateFormat = ''; useNoDateStyle() {} useShortTimeStyle() {} string(d: Date) { if (this.dateFormat === 'H') return String(d.getHours()); if (this.dateFormat === 'EEE') return d.toLocaleDateString('en', { weekday: 'short' }); if (this.dateFormat === 'yyyy-MM-dd') return d.toLocaleDateString('en-CA'); return d.toTimeString().slice(0, 5) } }
   const SFSymbol = { named: (n: string) => ({ image: { name: n }, applyFont() {} }) }
-  ;(SFSymbol as any)
   const store = new Map()
   const FileManager = { local: () => ({ cacheDirectory: () => '/c', documentsDirectory: () => '/d', joinPath: (a: string, b: string) => a + '/' + b, writeString: (p: string, s: string) => store.set(p, s), readString: (p: string) => store.get(p), fileExists: (p: string) => store.has(p) }) }
   class Request { timeoutInterval = 0; constructor(public u: string) {} async loadJSON() { return (await fetch(this.u)).json() } }
