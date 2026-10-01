@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { buildEnsembleUrl, buildForecastUrl } from '../src/data/openmeteo'
 import { MODELS, VISIBLE_MODELS } from '../src/config/models'
@@ -36,5 +37,18 @@ describe('request builders', () => {
     expect(buildEnsembleUrl({ lat: 50.9, lon: -115.1 }, 'gem_global_ensemble')).toMatch(
       /^https:\/\/ensemble-api\.open-meteo\.com\/v1\/ensemble\?/,
     )
+  })
+})
+
+
+describe('widget script', () => {
+  it('header version matches VERSION (self-update relies on it)', () => {
+    const code = readFileSync(new URL('../public/widget.js', import.meta.url), 'utf8')
+    const header = /^\/\/ PEAKCAST_WIDGET v(\d+)/.exec(code)?.[1]
+    const constant = /const VERSION = (\d+)/.exec(code)?.[1]
+    expect(header).toBeDefined()
+    expect(header).toBe(constant)
+    // The install page and updater fill in only the first placeholder: the APP line.
+    expect(code.indexOf("'https://YOUR-APP.vercel.app'")).toBeLessThan(code.indexOf('const PLACEHOLDER'))
   })
 })

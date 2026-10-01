@@ -27,9 +27,8 @@ compare them without clicking around. Data comes from [Open-Meteo](https://open-
 ## iPhone widget (Scriptable)
 
 Home-screen widgets come from the free [Scriptable](https://apps.apple.com/app/scriptable/id1405459188)
-app. The widget code lives at `public/widget.js` (served at `/widget.js`). A tiny
-loader (`public/widget-loader.js`) fetches it on each refresh, so updates deploy
-with the site. Small: temperature, max gust, 0 °C level, next-24 h precip/snow.
+app. The widget code lives at `public/widget.js` (served at `/widget.js`). It updates itself from the site on each
+refresh, so you only paste it once. Small: temperature, max gust, 0 °C level, next-24 h precip/snow.
 Medium/large: adds wind and a 36 h temperature line per model (HRDPS, HRRR, RDPS).
 Setup: open `/widget-install.html` on the iPhone (Settings → *Set up home-screen widget*) and tap Copy. Set the widget's Parameter to a Peakcast share link, `Name;lat;lon[;elev]`, or `here` (current location). Medium and large default to the hourly strip (add `| summary` for the summary layout; `| hourly` on a small widget): time, icon, temperature, precip (rain mm / snow cm), wind, colour-coded gusts and direction, e.g. `here | hourly`. The **large** hourly widget adds a Windy-style 5-day panel (GDPS + ECMWF IFS): icons, low/high, a temperature curve and an hourly precip strip.
 Tapping the widget opens that spot in Peakcast.

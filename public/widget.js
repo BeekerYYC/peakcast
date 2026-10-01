@@ -1,7 +1,8 @@
-// PEAKCAST_WIDGET v4
+// PEAKCAST_WIDGET v5
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
-// Loaded by the small loader script (see README "iPhone widget"), or paste this
-// whole file into Scriptable and set APP below.
+// Paste this whole file into Scriptable (copy it from <your site>/widget-install.html,
+// which fills in APP). It updates itself: each run checks APP/widget.js and, if
+// that version is newer, rewrites this script in place.
 //
 // Widget parameter (long-press widget → Edit Widget → Parameter), any of:
 //   - a Peakcast share link (Share → Copy in the app)
@@ -734,7 +735,7 @@ function buildHourly(spot, res, family) {
   const f = new DateFormatter()
   f.useNoDateStyle()
   f.useShortTimeStyle()
-  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v4', 9, stale ? C.warn : D.muted)
+  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v' + VERSION, 9, stale ? C.warn : D.muted)
   const small = family === 'small'
   const large = family === 'large'
   if (large) {
@@ -854,7 +855,34 @@ function errorWidget(spot, e) {
   return w
 }
 
+// ---------- self-update ----------
+
+const VERSION = 5
+const PLACEHOLDER = 'https://YOUR-APP.vercel.app'
+
+/** Fetch the latest widget from the site and overwrite this script if newer. */
+async function selfUpdate() {
+  if (typeof BASE !== 'undefined') return // run by the loader, which handles updates
+  if (APP === PLACEHOLDER || typeof module === 'undefined' || !module.filename) return
+  try {
+    const req = new Request(APP + '/widget.js?t=' + Date.now())
+    req.timeoutInterval = 10
+    const code = await req.loadString()
+    const m = /^\/\/ PEAKCAST_WIDGET v(\d+)/.exec(code)
+    if (!m || Number(m[1]) <= VERSION) return
+    const updated = code.replace("'" + PLACEHOLDER + "'", "'" + APP + "'")
+    const path = module.filename
+    const fm = path.includes('Mobile Documents') ? FileManager.iCloud() : FileManager.local()
+    fm.writeString(path, updated)
+    console.log('Updated Peakcast widget v' + VERSION + ' → v' + m[1] + ' (applies from the next refresh)')
+  } catch (e) {
+    console.log('Update check skipped: ' + (e && e.message ? e.message : e))
+  }
+}
+
 // ---------- run ----------
+
+await selfUpdate()
 
 const param = typeof args !== 'undefined' ? args.widgetParameter : null
 // Opened by tapping a widget set to "Run Script" (param may be null if empty).

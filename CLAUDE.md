@@ -184,9 +184,13 @@ Chromium at `/opt/pw-browsers` in the cloud env) · deployed to Vercel.
 `public/widget.js` is a Scriptable (iOS) widget script, plain JS with no build
 step, using Scriptable globals (`ListWidget`, `Request`, `DrawContext`, …). It
 mirrors the app's model ids, colours and freezing-level method for HRDPS, HRRR
-and RDPS. `public/widget-loader.js` is what users paste into Scriptable: it
-downloads `/widget.js` and runs it via `AsyncFunction('BASE', code)`, caching the
-code for offline use. Keep the `PEAKCAST_WIDGET` marker on line 1.
+and RDPS. Users paste the whole file into Scriptable (copied from
+`/widget-install.html`, which fills in `APP`). It **self-updates**: each run
+fetches `APP/widget.js` and rewrites its own script (`module.filename`) when the
+remote version is newer. **On every widget change bump both the line-1 marker
+`// PEAKCAST_WIDGET vN` and `const VERSION = N`** (a unit test checks they match).
+`public/widget-loader.js` is a legacy alternative that runs the remote code via
+`AsyncFunction('BASE', code)`.
 Parameter: share link | `Name;lat;lon[;elev]` | `here`, optionally `| hourly`
 or `| summary` (medium/large default to the DrawContext-rendered hourly strip). Header shows the widget code version (v3) to spot stale code. `/widget-install.html` copies the loader
 with the site address pre-filled. Preview locally with `npm run widget:preview`.

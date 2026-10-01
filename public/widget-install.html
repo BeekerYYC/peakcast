@@ -31,13 +31,13 @@
     <li>Tap the new script once. A forecast preview should pop up.</li>
     <li>Add a <b>Scriptable</b> widget to your home screen, long-press it → <b>Edit Widget</b>: Script = your script, When Interacting = <b>Run Script</b>, Parameter = a Peakcast share link (or leave empty).</li>
   </ol>
-  <p>The script below already contains this site's address.</p>
-  <pre id="code">Loading…</pre>
+  <p>The script already contains this site's address and <b>updates itself</b>, so this is the only time you paste it. Already have an older Peakcast script? Open it in Scriptable, select all, delete, and paste this instead (or make a new script and point your widgets at it).</p>
+  <details><summary>Show the script</summary><pre id="code">Loading…</pre></details>
 </main>
 <script>
   const el = document.getElementById('code')
   let code = ''
-  fetch('/widget-loader.js', { cache: 'no-store' })
+  fetch('/widget.js', { cache: 'no-store' })
     .then((r) => r.text())
     .then((t) => {
       code = t.replace("'https://YOUR-APP.vercel.app'", "'" + location.origin + "'")
@@ -48,7 +48,7 @@
     const ok = document.getElementById('ok')
     try {
       await navigator.clipboard.writeText(code)
-      ok.textContent = 'Copied ✓ (' + code.split('\n').length + ' lines)'
+      ok.textContent = 'Copied ✓ (' + code.split('\n').length + ' lines, ' + (code.split('\n')[0] || '').replace('// PEAKCAST_WIDGET ', '') + ')'
     } catch {
       const r = document.createRange()
       r.selectNodeContents(el)
