@@ -54,7 +54,7 @@ const result = await page.evaluate(async ({ code, family, param }) => {
   }
   const items: string[] = []
   class Stack { kids: any[] = []; addStack() { const s = new Stack(); this.kids.push(s); return s } addText(t: string) { const o: any = { t }; items.push('text: ' + t); this.kids.push(o); return o } addImage(img: any) { const o: any = { img }; this.kids.push(o); return o } addSpacer() {} centerAlignContent() {} layoutVertically() {} setPadding() {} }
-  class ListWidget extends Stack { async presentMedium() {} }
+  class ListWidget extends Stack { async presentMedium() {} async presentLarge() {} }
   class DateFormatter { dateFormat = ''; useNoDateStyle() {} useShortTimeStyle() {} string(d: Date) { if (this.dateFormat === 'H') return String(d.getHours()); if (this.dateFormat === 'EEE') return d.toLocaleDateString('en', { weekday: 'short' }); if (this.dateFormat === 'yyyy-MM-dd') return d.toLocaleDateString('en-CA'); return d.toTimeString().slice(0, 5) } }
   const SFSymbol = { named: (n: string) => ({ image: { name: n }, applyFont() {} }) }
   const store = new Map()

@@ -794,22 +794,35 @@ function errorWidget(spot, e) {
 
 // ---------- run ----------
 
-const { spec, style } = parseParam(typeof args !== 'undefined' ? args.widgetParameter : null)
-const family = config.runsInWidget ? config.widgetFamily || 'small' : 'medium'
+const param = typeof args !== 'undefined' ? args.widgetParameter : null
+// Opened by tapping a widget set to "Run Script" (param may be null if empty).
+const fromWidgetTap = !config.runsInWidget && param != null
+// Run by hand inside Scriptable: preview the large "here | hourly" widget.
+// This is also what makes iOS show the location permission prompt, which a
+// widget alone can't trigger.
+const manual = !config.runsInWidget && !fromWidgetTap
+const { spec, style } = parseParam(manual ? 'here | hourly' : param)
+const family = config.runsInWidget ? config.widgetFamily || 'small' : manual ? 'large' : 'medium'
 let spot = parseSpot(spec)
 let widget
 try {
-  if (spec.toLowerCase() === 'here') spot = await hereSpot()
+  if (spec.toLowerCase() === 'here') {
+    try {
+      spot = await hereSpot()
+    } catch (e) {
+      if (!manual) throw e
+      console.log('Location not available (' + e.message + '); previewing Kananaskis Village instead')
+    }
+  }
   const res = await load(spot)
   if (style === 'hourly' && family === 'large') res.daily = await loadDaily(spot)
   widget = style === 'hourly' ? buildHourly(spot, res, family) : build(spot, res, family)
 } catch (e) {
   widget = errorWidget(spot, e)
 }
-const fromWidgetTap = !config.runsInWidget && typeof args !== 'undefined' && args.widgetParameter != null
-console.log('Peakcast widget: ' + spot.name + ' · ' + family + (fromWidgetTap ? ' · opened from widget tap' : ''))
+console.log('Peakcast widget: ' + spot.name + ' · ' + family + ' · ' + style + (fromWidgetTap ? ' · opened from widget tap' : ''))
 if (config.runsInWidget) Script.setWidget(widget)
 // Widget set to "Run Script": a tap lands here, so jump to Peakcast.
 else if (fromWidgetTap) Safari.open(spotLink(spot))
-else await widget.presentMedium()
+else await widget.presentLarge()
 Script.complete()
