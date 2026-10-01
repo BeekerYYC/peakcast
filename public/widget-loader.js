@@ -1,7 +1,8 @@
 // Peakcast widget loader for Scriptable.
-// 1. Replace the URL below with your Peakcast address (no trailing slash).
-// 2. Leave the rest as is: it downloads the latest widget code from your
-//    Peakcast site each refresh and falls back to the last copy offline.
+// BASE is your Peakcast address. It's filled in for you when copied from
+// <your site>/widget-install.html; otherwise replace it (no trailing slash).
+// The rest downloads the latest widget code from that site on each refresh
+// and falls back to the last saved copy when offline.
 const BASE = 'https://YOUR-APP.vercel.app'
 
 const fm = FileManager.local()

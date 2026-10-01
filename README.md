@@ -31,7 +31,7 @@ app. The widget code lives at `public/widget.js` (served at `/widget.js`). A tin
 loader (`public/widget-loader.js`) fetches it on each refresh, so updates deploy
 with the site. Small: temperature, max gust, 0 °C level, next-24 h precip/snow.
 Medium/large: adds wind and a 36 h temperature line per model (HRDPS, HRRR, RDPS).
-Set the widget's Parameter to a Peakcast share link, or `Name;lat;lon[;elev]`.
+Setup: open `/widget-install.html` on the iPhone (Settings → *Set up home-screen widget*) and tap Copy. Set the widget's Parameter to a Peakcast share link, or `Name;lat;lon[;elev]`.
 Tapping the widget opens that spot in Peakcast.
 
 ## Development

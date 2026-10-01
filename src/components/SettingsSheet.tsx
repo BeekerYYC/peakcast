@@ -80,6 +80,12 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
               <b className="text-ink">Friends:</b> the share button on a spot sends a link that opens
               the forecast directly, and they can save it. Spots are stored on each device only.
             </p>
+            <a
+              href="/widget-install.html"
+              className="mt-3 flex h-10 w-full items-center justify-center rounded-xl bg-surface text-[14px] font-semibold text-ink shadow-[0_0_0_1px_var(--hair)]"
+            >
+              Set up home-screen widget
+            </a>
             <button
               type="button"
               onClick={() => void shareApp()}

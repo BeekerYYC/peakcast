@@ -43,6 +43,8 @@ export default defineConfig({
         // MapPicker (MapLibre) is ~1 MB; precache it so the map opens offline.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
+        // Static pages (widget setup) must not be swallowed by the SPA.
+        navigateFallbackDenylist: [/^\/widget/],
         cleanupOutdatedCaches: true,
         // Forecast data is cached by the app in IndexedDB (with fetch times),
         // so API calls are network-only here. Map tiles are cached.
