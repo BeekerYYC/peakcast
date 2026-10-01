@@ -49,7 +49,11 @@ export function ForecastView({ spot, data, loading }: Props) {
     () => buildTimeline(tz, spot.lat, spot.lon, horizon.hours, PAST_HOURS, hour * 3_600_000 + 1),
     [tz, spot.lat, spot.lon, horizon.hours, hour],
   )
-  const ctx: ChartCtx = useMemo(() => ({ precipMode, elevation }), [precipMode, elevation])
+  const aggHours = horizon.hours > 96 ? 6 : 1
+  const ctx: ChartCtx = useMemo(
+    () => ({ precipMode, elevation, aggHours }),
+    [precipMode, elevation, aggHours],
+  )
   const charts = useMemo(
     () => CHARTS.map((def) => ({ def, cd: buildChartData(def, ctx, tl, models) })),
     [ctx, tl, models],
@@ -62,7 +66,7 @@ export function ForecastView({ spot, data, loading }: Props) {
       {hasData ? (
         <>
           <DailySummary models={models} tl={tl} />
-          <ScrubBar tl={tl} precipMode={precipMode} onPrecipMode={setPrecipMode} />
+          <ScrubBar tl={tl} precipMode={precipMode} aggHours={aggHours} onPrecipMode={setPrecipMode} />
           <div className="flex flex-col gap-2.5">
             {charts.map(({ def, cd }) => (
               <ChartCard key={def.id} def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX />

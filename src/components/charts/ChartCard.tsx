@@ -5,7 +5,7 @@ import { compass, num } from '../../lib/format'
 import type { Resolved } from '../../lib/theme'
 import { useScrub } from '../../state/scrub'
 import type { ChartData } from './buildData'
-import type { ChartCtx, ChartDef } from './chartDefs'
+import { unitFor, type ChartCtx, type ChartDef } from './chartDefs'
 import { UPlotChart } from './UPlotChart'
 
 interface Props {
@@ -61,14 +61,14 @@ export const ChartCard = memo(function ChartCard({ def, ctx, tl, cd, theme, show
     <section className="rounded-2xl bg-surface shadow-[0_0_0_1px_var(--hair)]">
       <header className="flex items-start justify-between gap-3 px-3.5 pt-2.5 pb-0.5">
         <h3 className="shrink-0 text-[13px] leading-5 font-semibold text-ink">
-          {def.title} <span className="font-normal text-muted">{def.unit}</span>
+          {def.title} <span className="font-normal text-muted">{unitFor(def, ctx)}</span>
         </h3>
         {!collapsed && !noData && <Readout def={def} tl={tl} cd={cd} />}
       </header>
       {collapsed ? (
         <p className="px-3.5 pb-3 text-[12px] text-muted">{def.collapseWhenEmpty}</p>
       ) : noData ? (
-        <p className="px-3.5 pb-3 text-[12px] text-muted">Not available from the selected models</p>
+        <p className="px-3.5 pb-3 text-[12px] text-muted">{def.noDataHint ?? 'Not available from the selected models'}</p>
       ) : (
         <div className="pr-1 pb-1">
           <UPlotChart def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX={showX} />

@@ -4,7 +4,10 @@ import {
   deriveLiquid,
   ensembleStats,
   freezingLevel,
+  modeSeries,
 } from '../src/data/derive'
+import { bucketSum } from '../src/components/charts/buildData'
+import type { Timeline } from '../src/data/timeline'
 
 describe('freezingLevel', () => {
   it('interpolates the 0 °C crossing above the surface', () => {
@@ -62,5 +65,21 @@ describe('ensembleStats', () => {
 describe('circularMean', () => {
   it('averages across north correctly', () => {
     expect(circularMean([[350], [10]])).toEqual([0])
+  })
+})
+
+describe('modeSeries', () => {
+  it('picks the most common code (ties → more severe)', () => {
+    expect(modeSeries([[3, 61], [3, 71], [2, 61], [71, 71]])).toEqual([3, 71])
+  })
+})
+
+describe('bucketSum', () => {
+  it('sums into local 6 h buckets, hour-ending convention', () => {
+    // Window starting at local 04:00: hours 04,05,06 | 07..12 | 13
+    const hours = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    const tl = { hours } as unknown as Timeline
+    const s = [1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 2]
+    expect(bucketSum(s, tl, 6)).toEqual([3, 3, 3, 3, 3, 3, 3, 3, 3, 2])
   })
 })

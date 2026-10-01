@@ -16,6 +16,8 @@ export interface ChartCtx {
   precipMode: PrecipMode
   /** Elevation the forecast is valid for (m). */
   elevation: number
+  /** Bucket size for hourly precip bars on long horizons (1 = none). */
+  aggHours: number
 }
 
 export interface RefLine {
@@ -36,6 +38,10 @@ export interface ChartDef {
   /** Collapse the chart (header only) when every visible value is 0/null. */
   collapseWhenEmpty?: string
   windArrows?: boolean
+  /** Shown when none of the visible models provide this variable. */
+  noDataHint?: string
+  /** Precip-style series that are summed into `aggHours` buckets. */
+  aggregates?: boolean
   /** Allow ensemble spread bands (only meaningful for hourly values). */
   bands?: (c: ChartCtx) => boolean
 }
@@ -72,9 +78,10 @@ export const CHARTS: ChartDef[] = [
     height: 120,
     digits: 1,
     lines: precipLines('precipitation'),
-    range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : 2, Math.ceil(max * 1.15))],
+    range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : 2 * Math.sqrt(c.aggHours), Math.ceil(max * 1.15))],
     collapseWhenEmpty: 'No precipitation forecast',
-    bands: (c) => c.precipMode === 'hourly',
+    aggregates: true,
+    bands: (c) => c.precipMode === 'hourly' && c.aggHours === 1,
   },
   {
     id: 'snow',
@@ -83,9 +90,10 @@ export const CHARTS: ChartDef[] = [
     height: 110,
     digits: 1,
     lines: precipLines('snowfall'),
-    range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : 1, Math.ceil(max * 1.15))],
+    range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : Math.sqrt(c.aggHours), Math.ceil(max * 1.15))],
     collapseWhenEmpty: 'No snow forecast',
-    bands: (c) => c.precipMode === 'hourly',
+    aggregates: true,
+    bands: (c) => c.precipMode === 'hourly' && c.aggHours === 1,
   },
   {
     id: 'wind',
@@ -114,6 +122,7 @@ export const CHARTS: ChartDef[] = [
       return [Math.max(0, Math.floor(lo / 250) * 250), Math.ceil(hi / 250) * 250]
     },
     refLines: (c) => [{ value: c.elevation, label: `${Math.round(c.elevation)} m`, kind: 'ground' }],
+    noDataHint: 'Not provided by these models. Tap Compare to overlay HRRR, HRDPS, RDPS, GDPS, IFS or AIFS.',
   },
   {
     id: 'cloud',
@@ -146,3 +155,9 @@ export const CHARTS: ChartDef[] = [
     bands: () => true,
   },
 ]
+
+/** Unit label, e.g. "mm/6h" when precip is bucketed. */
+export function unitFor(def: ChartDef, c: ChartCtx): string {
+  if (def.aggregates && c.precipMode === 'hourly' && c.aggHours > 1) return `${def.unit}/${c.aggHours}h`
+  return def.unit
+}

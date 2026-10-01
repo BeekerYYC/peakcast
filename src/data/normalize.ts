@@ -2,6 +2,7 @@ import { HOURLY_VARS, getModel, type VarKey } from '../config/models'
 import {
   allNull,
   circularMean,
+  modeSeries,
   deriveLiquid,
   ensembleStats,
   freezingLevelSeries,
@@ -135,6 +136,10 @@ export function normalizeEnsemble(raw: RawResponse, modelId: string): ModelSerie
     const list = membersOf(v)
     if (!list.length) continue
     members = Math.max(members, list.length)
+    if (v === 'weather_code') {
+      vars.weather_code = modeSeries(list)
+      continue
+    }
     if (v === 'wind_direction_10m') {
       vars[v as VarKey] = circularMean(list)
       continue

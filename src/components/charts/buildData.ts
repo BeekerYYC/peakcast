@@ -52,6 +52,7 @@ export function buildChartData(
       let s = align(m, m.vars[line.key], tl.times)
       if (s.every((v) => v == null)) continue
       if (line.accumulate) s = accumulate(s)
+      else if (def.aggregates && ctx.aggHours > 1) s = bucketSum(s, tl, ctx.aggHours)
       has = true
       vals[line.role] = s
       data.push(s)
@@ -93,4 +94,37 @@ export function buildChartData(
     min,
     max,
   }
+}
+
+/**
+ * Sum hourly amounts into local-time buckets of `n` hours (e.g. 00–06) and
+ * repeat the bucket total across its hours so a stepped line draws a block.
+ * Open-Meteo amounts are for the preceding hour, so the hour ending at 06:00
+ * belongs to the 00–06 bucket.
+ */
+export function bucketSum(s: Series, tl: Timeline, n: number): Series {
+  const key = (i: number) => {
+    // Local hour index since the first local midnight before the window.
+    const local = i + tl.hours[0] - 1
+    return Math.floor(local / n)
+  }
+  const out: Series = new Array(s.length).fill(null)
+  let i = 0
+  while (i < s.length) {
+    const k = key(i)
+    let j = i
+    let sum = 0
+    let any = false
+    while (j < s.length && key(j) === k) {
+      const v = s[j]
+      if (v != null) {
+        sum += v
+        any = true
+      }
+      j++
+    }
+    for (let x = i; x < j; x++) out[x] = any && s[x] != null ? Math.round(sum * 100) / 100 : null
+    i = j
+  }
+  return out
 }

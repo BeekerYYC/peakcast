@@ -6,11 +6,12 @@ import { useScrub } from '../state/scrub'
 interface Props {
   tl: Timeline
   precipMode: PrecipMode
+  aggHours: number
   onPrecipMode: (m: PrecipMode) => void
 }
 
 /** Sticky bar: the hour under the scrubber, a "Now" reset and the precip mode. */
-export function ScrubBar({ tl, precipMode, onPrecipMode }: Props) {
+export function ScrubBar({ tl, precipMode, aggHours, onPrecipMode }: Props) {
   const t = useScrub((s) => s.t)
   const set = useScrub((s) => s.set)
   const isNow = t == null || t === tl.now
@@ -38,11 +39,11 @@ export function ScrubBar({ tl, precipMode, onPrecipMode }: Props) {
             type="button"
             onClick={() => onPrecipMode(m)}
             aria-pressed={precipMode === m}
-            className={`rounded-md px-2 py-1 capitalize transition-colors ${
+            className={`rounded-md px-2 py-1 transition-colors ${
               precipMode === m ? 'bg-surface text-ink shadow-sm' : 'text-ink-2'
             }`}
           >
-            {m === 'hourly' ? 'Hourly' : 'Total'}
+            {m === 'hourly' ? (aggHours > 1 ? `${aggHours}-hourly` : 'Hourly') : 'Total'}
           </button>
         ))}
       </div>

@@ -145,3 +145,21 @@ export function round(v: number, digits: number): number {
 export function allNull(s: Series | undefined): boolean {
   return !s || s.every((v) => v == null)
 }
+
+/** Most frequent value per hour across members (for categorical codes). */
+export function modeSeries(members: Series[]): Series {
+  const n = members[0]?.length ?? 0
+  const out: Series = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    const counts = new Map<number, number>()
+    for (const m of members) {
+      const v = m[i]
+      if (v != null) counts.set(v, (counts.get(v) ?? 0) + 1)
+    }
+    let best: number | null = null
+    let bestC = 0
+    for (const [v, c] of counts) if (c > bestC || (c === bestC && best != null && v > best)) [best, bestC] = [v, c]
+    out[i] = best
+  }
+  return out
+}

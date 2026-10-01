@@ -23,10 +23,11 @@ interface Props {
   showX: boolean
 }
 
-function tickStep(hours: number): number {
-  if (hours <= 54) return 6
-  if (hours <= 96) return 12
-  return 24
+/** Smallest tick step (h) that leaves ~36 px per label. */
+function tickStep(hours: number, plotPx: number): number {
+  const fit = Math.max(2, Math.floor(plotPx / 36))
+  for (const st of [3, 6, 12, 24, 48, 72, 96]) if (hours / st <= fit) return st
+  return 96
 }
 
 export function UPlotChart({ def, ctx, tl, cd, theme, showX }: Props) {
@@ -37,7 +38,8 @@ export function UPlotChart({ def, ctx, tl, cd, theme, showX }: Props) {
     const el = host.current
     if (!el) return
     const C = CHROME[theme]
-    const step = tickStep((tl.to - tl.from) / 3600)
+    const step = tickStep((tl.to - tl.from) / 3600, el.clientWidth - Y_AXIS)
+    const longRange = (tl.to - tl.from) / 3600 > 250
     const [yMin, yMax] = def.range(cd.min, cd.max, ctx)
     const refs = def.refLines?.(ctx) ?? []
 
@@ -107,11 +109,14 @@ export function UPlotChart({ def, ctx, tl, cd, theme, showX }: Props) {
           gap: 2,
           grid: { show: false },
           ticks: { show: false },
-          splits: () => tl.times.filter((_, i) => tl.hours[i] % step === 0),
+          splits: () => {
+            if (step <= 24) return tl.times.filter((_, i) => tl.hours[i] % step === 0)
+            return tl.midnights.filter((_, i) => i % (step / 24) === 0)
+          },
           values: (_u, splits) =>
             splits.map((t) => {
               const h = tl.hours[Math.round((t - tl.from) / 3600)]
-              if (h === 0) return step === 24 ? `${weekday(t, tl.tz)} ${dayOfMonth(t, tl.tz)}` : weekday(t, tl.tz)
+              if (h === 0) return step >= 24 ? `${weekday(t, tl.tz)} ${dayOfMonth(t, tl.tz)}` : weekday(t, tl.tz)
               return shortHour(h)
             }),
         },
@@ -135,8 +140,10 @@ export function UPlotChart({ def, ctx, tl, cd, theme, showX }: Props) {
             const X = (t: number) => u.valToPos(t, 'x', true)
             c.save()
             // Night shading.
-            c.fillStyle = C.night
-            for (const [a, b] of tl.nights) c.fillRect(X(a), top, X(b) - X(a), height)
+            if (!longRange) {
+              c.fillStyle = C.night
+              for (const [a, b] of tl.nights) c.fillRect(X(a), top, X(b) - X(a), height)
+            }
             // Below-ground band on the freezing-level chart.
             for (const r of refs) {
               if (r.kind !== 'ground') continue

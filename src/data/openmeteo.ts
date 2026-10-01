@@ -21,6 +21,7 @@ export const ENSEMBLE_VARS = [
   'cloud_cover',
   'relative_humidity_2m',
   'pressure_msl',
+  'weather_code',
 ]
 
 /** The model plus any hidden companions it depends on. */
