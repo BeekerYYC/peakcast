@@ -36,7 +36,7 @@ const result = await page.evaluate(async ({ code, family, param }) => {
   class Size { constructor(public width: number, public height: number) {} }
   class Point { constructor(public x: number, public y: number) {} }
   class Rect { constructor(public x: number, public y: number, public width: number, public height: number) {} }
-  class Path { ops: any[] = []; move(p: any) { this.ops.push(['m', p]) } addLine(p: any) { this.ops.push(['l', p]) } closeSubpath() { this.ops.push(['z']) } }
+  class Path { ops: any[] = []; move(p: any) { this.ops.push(['m', p]) } addLine(p: any) { this.ops.push(['l', p]) } closeSubpath() { this.ops.push(['z']) } addRoundedRect(r: any) { this.ops.push(['m', { x: r.x, y: r.y }], ['l', { x: r.x + r.width, y: r.y }], ['l', { x: r.x + r.width, y: r.y + r.height }], ['l', { x: r.x, y: r.y + r.height }], ['z']) } }
   const Font = { systemFont: (n: number) => `${n}px -apple-system, system-ui`, boldSystemFont: (n: number) => `700 ${n}px system-ui`, semiboldSystemFont: (n: number) => `600 ${n}px system-ui` }
   class DrawContext {
     c = document.createElement('canvas'); x: any; _size: any; path: any; font = '10px system-ui'; tc = '#fff'; align = 'left'; opaque = true; respectScreenScale = true
@@ -55,8 +55,9 @@ const result = await page.evaluate(async ({ code, family, param }) => {
   const items: string[] = []
   class Stack { kids: any[] = []; addStack() { const s = new Stack(); this.kids.push(s); return s } addText(t: string) { const o: any = { t }; items.push('text: ' + t); this.kids.push(o); return o } addImage(img: any) { const o: any = { img }; this.kids.push(o); return o } addSpacer() {} centerAlignContent() {} layoutVertically() {} setPadding() {} }
   class ListWidget extends Stack { async presentMedium() {} }
-  class DateFormatter { dateFormat = ''; useNoDateStyle() {} useShortTimeStyle() {} string(d: Date) { if (this.dateFormat === 'H') return String(d.getHours()); if (this.dateFormat === 'EEE') return d.toLocaleDateString('en', { weekday: 'short' }); return d.toTimeString().slice(0, 5) } }
+  class DateFormatter { dateFormat = ''; useNoDateStyle() {} useShortTimeStyle() {} string(d: Date) { if (this.dateFormat === 'H') return String(d.getHours()); if (this.dateFormat === 'EEE') return d.toLocaleDateString('en', { weekday: 'short' }); if (this.dateFormat === 'yyyy-MM-dd') return d.toLocaleDateString('en-CA'); return d.toTimeString().slice(0, 5) } }
   const SFSymbol = { named: (n: string) => ({ image: { name: n }, applyFont() {} }) }
+  ;(SFSymbol as any)
   const store = new Map()
   const FileManager = { local: () => ({ cacheDirectory: () => '/c', documentsDirectory: () => '/d', joinPath: (a: string, b: string) => a + '/' + b, writeString: (p: string, s: string) => store.set(p, s), readString: (p: string) => store.get(p), fileExists: (p: string) => store.has(p) }) }
   class Request { timeoutInterval = 0; constructor(public u: string) {} async loadJSON() { return (await fetch(this.u)).json() } }

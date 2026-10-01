@@ -199,6 +199,43 @@ async function load(s) {
   }
 }
 
+/** 5-day outlook for the large hourly widget: GDPS + ECMWF IFS (mean). */
+const DAILY_MODELS = ['cmc_gem_gdps', 'ecmwf_ifs']
+
+async function loadDaily(s) {
+  const fm = FileManager.local()
+  const file = fm.joinPath(fm.cacheDirectory(), 'peakcast-5d-' + s.lat.toFixed(3) + s.lon.toFixed(3) + '.json')
+  const p = [
+    'latitude=' + s.lat.toFixed(5),
+    'longitude=' + s.lon.toFixed(5),
+    'models=' + DAILY_MODELS.join(','),
+    'hourly=temperature_2m,precipitation,snowfall,weather_code',
+    'timezone=auto',
+    'timeformat=unixtime',
+    'forecast_days=6',
+  ]
+  if (s.elev != null) p.push('elevation=' + Math.round(s.elev))
+  let raw
+  try {
+    const req = new Request('https://api.open-meteo.com/v1/forecast?' + p.join('&'))
+    req.timeoutInterval = 20
+    raw = await req.loadJSON()
+    if (!raw.hourly) throw new Error(raw.reason || 'Bad response')
+    fm.writeString(file, JSON.stringify(raw))
+  } catch {
+    if (!fm.fileExists(file)) return null
+    raw = JSON.parse(fm.readString(file))
+  }
+  const h = raw.hourly
+  const models = DAILY_MODELS.map((id) => ({
+    temp: h['temperature_2m_' + id] || [],
+    precip: h['precipitation_' + id] || [],
+    snow: h['snowfall_' + id] || [],
+    code: h['weather_code_' + id] || [],
+  })).filter((m) => m.temp.some((v) => v != null))
+  return models.length ? { time: h.time, models } : null
+}
+
 // ---------- summary ----------
 
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null)
@@ -494,6 +531,132 @@ function statRow(stack, label, value) {
   text(r, value, 12, C.ink, 'semibold')
 }
 
+/** Windy-Premium-style 5-day panel: day columns, icon, lo/hi, temperature curve, precip strip. */
+function dailyPanel(dd, w, h) {
+  const isDark = dark()
+  const ink = new Color(isDark ? '#ffffff' : '#0b0b0b')
+  const ink2 = new Color(isDark ? '#c3c2b7' : '#52514e')
+  const ctx = new DrawContext()
+  ctx.size = new Size(w, h)
+  ctx.opaque = false
+  ctx.respectScreenScale = true
+  const keyFmt = new DateFormatter()
+  keyFmt.dateFormat = 'yyyy-MM-dd'
+  const dayFmt = new DateFormatter()
+  dayFmt.dateFormat = 'EEE'
+  const hourFmt = new DateFormatter()
+  hourFmt.dateFormat = 'H'
+
+  // Hour-by-hour consensus.
+  const avg = (key, i) => mean(nums(dd.models.map((m) => m[key][i])))
+  const days = []
+  const byKey = new Map()
+  dd.time.forEach((t, i) => {
+    const date = new Date(t * 1000)
+    const k = keyFmt.string(date)
+    if (!byKey.has(k)) {
+      const day = { k, label: dayFmt.string(date).toUpperCase(), idx: [] }
+      byKey.set(k, day)
+      days.push(day)
+    }
+    byKey.get(k).idx.push(i)
+  })
+  // Drop days that already ended, keep five, and call the current one TODAY.
+  while (days.length && days[0].idx.every((i) => dd.time[i] * 1000 < Date.now() - 3600e3)) days.shift()
+  const shown = days.slice(0, 5)
+  const todayKey = keyFmt.string(new Date())
+  for (const day of shown) if (day.k === todayKey) day.label = 'TODAY'
+  if (!shown.length) return ctx.getImage()
+  const cols = shown.length
+  const cw = w / cols
+  const first = shown[0].idx[0]
+  const last = shown[cols - 1].idx[shown[cols - 1].idx.length - 1]
+  const span = Math.max(1, last - first)
+  const X = (i) => ((i - first) / span) * w
+
+  // Temperature curve (filled) behind the columns.
+  const temps = []
+  for (let i = first; i <= last; i++) temps.push(avg('temp', i))
+  const tv = nums(temps)
+  const curveTop = h * 0.3
+  const curveBot = h * 0.66
+  if (tv.length > 1) {
+    const lo = Math.min(...tv)
+    const hi = Math.max(...tv)
+    const Yt = (v) => curveBot - ((v - lo) / Math.max(1, hi - lo)) * (curveBot - curveTop)
+    const area = new Path()
+    area.move(new Point(0, curveBot + 6))
+    let started = false
+    temps.forEach((v, j) => {
+      if (v == null) return
+      const pt = new Point(X(first + j), Yt(v))
+      area.addLine(pt)
+      started = true
+    })
+    if (started) {
+      area.addLine(new Point(w, curveBot + 6))
+      area.closeSubpath()
+      ctx.addPath(area)
+      ctx.setFillColor(new Color(isDark ? '#7fb2a0' : '#1baf7a', isDark ? 0.22 : 0.16))
+      ctx.fillPath()
+    }
+  }
+
+  const textAt = (str, x, y, width, size, color, bold) => {
+    ctx.setFont(bold ? Font.semiboldSystemFont(size) : Font.systemFont(size))
+    ctx.setTextColor(color)
+    ctx.setTextAlignedCenter()
+    ctx.drawTextInRect(str, new Rect(x, y, width, size + 4))
+  }
+
+  shown.forEach((day, c) => {
+    const x = c * cw
+    if (c > 0) {
+      const p = new Path()
+      p.move(new Point(x, 0))
+      p.addLine(new Point(x, h * 0.72))
+      ctx.addPath(p)
+      ctx.setStrokeColor(new Color('#898781', 0.35))
+      ctx.setLineWidth(1)
+      ctx.strokePath()
+    }
+    textAt(day.label, x, 0, cw, 10, ink2, true)
+    const t = nums(day.idx.map((i) => avg('temp', i)))
+    const daytime = day.idx.filter((i) => {
+      const hr = Number(hourFmt.string(new Date(dd.time[i] * 1000)))
+      return hr >= 8 && hr <= 18
+    })
+    const codes = nums((daytime.length ? daytime : day.idx).map((i) => dd.models[0].code[i])).sort((a, b) => a - b)
+    const code = codes.length ? codes[Math.min(codes.length - 1, Math.floor(codes.length * 0.75))] : null
+    const sym = SFSymbol.named(wx(code, false)[0])
+    sym.applyFont(Font.systemFont(18))
+    const isz = 20
+    ctx.drawImageInRect(sym.image, new Rect(x + (cw - isz) / 2, 15, isz, isz))
+    const lo = t.length ? Math.min(...t) : null
+    const hi = t.length ? Math.max(...t) : null
+    textAt(n0(lo) + '°/' + n0(hi) + '°', x, h * 0.58, cw, 13, ink, true)
+  })
+
+  // Precip strip: hourly intensity, rain blue / snow pale blue.
+  const sy = h * 0.82
+  const sh = h * 0.12
+  const bg = new Path()
+  bg.addRoundedRect(new Rect(0, sy, w, sh), sh / 2, sh / 2)
+  ctx.addPath(bg)
+  ctx.setFillColor(new Color(isDark ? '#ffffff' : '#0b0b0b', 0.1))
+  ctx.fillPath()
+  const hw = w / (span + 1)
+  for (let i = first; i <= last; i++) {
+    const pr = avg('precip', i)
+    if (pr == null || pr < 0.05) continue
+    const sn = avg('snow', i)
+    const isSnow = sn != null && sn >= 0.05
+    ctx.setFillColor(new Color(isSnow ? '#a9cdf5' : '#3987e5', Math.min(1, 0.35 + pr / 1.5)))
+    ctx.fillRect(new Rect(X(i), sy, Math.max(1, hw), sh))
+  }
+  return ctx.getImage()
+}
+
 function buildHourly(spot, res, family) {
   const { data: d, at, stale } = res
   const s = summarize(d)
@@ -510,23 +673,39 @@ function buildHourly(spot, res, family) {
   f.useNoDateStyle()
   f.useShortTimeStyle()
   text(head, (stale ? 'offline · ' : '') + 'Peakcast · ' + f.string(new Date(at)), 9, stale ? C.warn : C.muted)
-  w.addSpacer(4)
   const small = family === 'small'
-  const cols = small ? 5 : family === 'large' ? 12 : 12
-  const step = family === 'large' ? 3 : 1
-  const iw = small ? 130 : 316
-  const ih = family === 'large' ? 130 : 112
-  const img = w.addImage(hourlyTable(d, s, iw, ih, step, cols))
-  img.imageSize = new Size(iw, ih)
-  if (family === 'large') {
-    w.addSpacer(8)
-    statRow(w, '0 °C level', fzlText(s.fzl))
-    statRow(w, 'Next 24 h', precipText(s))
-    statRow(w, 'Max gust 24 h', n0(s.gust24) + ' km/h')
-    w.addSpacer()
-    text(w, '3-hourly · rain mm / snow cm · wind km/h · ' + d.models.map((m) => m.short).join(', '), 9, C.muted)
+  const large = family === 'large'
+  if (large) {
+    // Current conditions line: "7° ☾ · wind 3 g8 km/h · 0 °C 2370 m".
+    const now = w.addStack()
+    now.centerAlignContent()
+    text(now, n0(s.temp) + '°', 13, C.ink, 'semibold')
+    now.addSpacer(4)
+    const sym = now.addImage(SFSymbol.named(wx(s.code, isNight())[0]).image)
+    sym.imageSize = new Size(14, 14)
+    sym.tintColor = C.ink2
+    now.addSpacer(6)
+    text(now, 'wind ' + n0(s.wind) + ' g' + n0(s.gust24) + ' km/h  ·  0 °C ' + fzlText(s.fzl), 11, C.ink2)
+    w.addSpacer(6)
+    if (res.daily) {
+      const di = w.addImage(dailyPanel(res.daily, 316, 104))
+      di.imageSize = new Size(316, 104)
+      w.addSpacer(6)
+    }
   } else {
-    w.addSpacer()
+    w.addSpacer(4)
+  }
+  const cols = small ? 5 : large ? 13 : 12
+  const iw = small ? 130 : 316
+  const ih = large ? 128 : 112
+  const img = w.addImage(hourlyTable(d, s, iw, ih, 1, cols))
+  img.imageSize = new Size(iw, ih)
+  w.addSpacer()
+  if (large) {
+    const foot = w.addStack()
+    text(foot, 'Hourly: ' + d.models.map((m) => m.short).join(', ') + ' · 5-day: GDPS, IFS', 8, C.muted)
+    foot.addSpacer()
+    text(foot, 'mm · cm · km/h', 8, C.muted)
   }
   return w
 }
@@ -622,6 +801,7 @@ let widget
 try {
   if (spec.toLowerCase() === 'here') spot = await hereSpot()
   const res = await load(spot)
+  if (style === 'hourly' && family === 'large') res.daily = await loadDaily(spot)
   widget = style === 'hourly' ? buildHourly(spot, res, family) : build(spot, res, family)
 } catch (e) {
   widget = errorWidget(spot, e)
