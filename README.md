@@ -24,6 +24,16 @@ compare them without clicking around. Data comes from [Open-Meteo](https://open-
 - **Home-screen icon per spot (iOS)**: open the spot in Safari, then Share →
   *Add to Home Screen*.
 
+## iPhone widget (Scriptable)
+
+Home-screen widgets come from the free [Scriptable](https://apps.apple.com/app/scriptable/id1405459188)
+app. The widget code lives at `public/widget.js` (served at `/widget.js`). A tiny
+loader (`public/widget-loader.js`) fetches it on each refresh, so updates deploy
+with the site. Small: temperature, max gust, 0 °C level, next-24 h precip/snow.
+Medium/large: adds wind and a 36 h temperature line per model (HRDPS, HRRR, RDPS).
+Set the widget's Parameter to a Peakcast share link, or `Name;lat;lon[;elev]`.
+Tapping the widget opens that spot in Peakcast.
+
 ## Development
 
 ```sh

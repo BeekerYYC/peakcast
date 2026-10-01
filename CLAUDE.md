@@ -180,6 +180,14 @@ zustand · idb-keyval · motion (framer-motion) for transitions ·
 vite-plugin-pwa · Vitest (unit) · Playwright (smoke at iPhone viewport,
 Chromium at `/opt/pw-browsers` in the cloud env) · deployed to Vercel.
 
+### iPhone widget
+`public/widget.js` is a Scriptable (iOS) widget script, plain JS with no build
+step, using Scriptable globals (`ListWidget`, `Request`, `DrawContext`, …). It
+mirrors the app's model ids, colours and freezing-level method for HRDPS, HRRR
+and RDPS. `public/widget-loader.js` is what users paste into Scriptable: it
+downloads `/widget.js` and runs it via `AsyncFunction('BASE', code)`, caching the
+code for offline use. Keep the `PEAKCAST_WIDGET` marker on line 1.
+
 ## Conventions
 
 - Mobile-first: design at 390×844 (iPhone 14/15) first; desktop is secondary.
