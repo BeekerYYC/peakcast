@@ -1,4 +1,4 @@
-// PEAKCAST_WIDGET v3
+// PEAKCAST_WIDGET v4
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
 // Loaded by the small loader script (see README "iPhone widget"), or paste this
 // whole file into Scriptable and set APP below.
@@ -385,7 +385,10 @@ function sparkline(d, s, w, h) {
   return ctx.getImage()
 }
 
-const dark = () => (typeof Device !== 'undefined' && Device.isUsingDarkAppearance ? Device.isUsingDarkAppearance() : true)
+// Device.isUsingDarkAppearance() always reports light inside widgets, so the
+// drawn (hourly) layouts use one fixed dark style, like Windy's widget.
+const dark = () => true
+const D = { bg: new Color('#1c1c1e'), ink: new Color('#ffffff'), ink2: new Color('#d1d0c9'), muted: new Color('#98989f') }
 
 /** Gust cell colours, roughly Windy-like: calm → none, then green, yellow, orange, red. */
 function gustFill(g) {
@@ -420,8 +423,8 @@ function arrow(ctx, cx, cy, fromDeg, r, color) {
 function hourlyTable(d, s, w, h, step, cols) {
   const isDark = dark()
   const ink = new Color(isDark ? '#ffffff' : '#0b0b0b')
-  const ink2 = new Color(isDark ? '#c3c2b7' : '#52514e')
-  const muted = new Color('#898781')
+  const ink2 = new Color(isDark ? '#d1d0c9' : '#52514e')
+  const muted = new Color('#98989f')
   const panelInk = new Color('#1a1a19')
   const ctx = new DrawContext()
   ctx.size = new Size(w, h)
@@ -594,7 +597,7 @@ function statRow(stack, label, value) {
 function dailyPanel(dd, w, h) {
   const isDark = dark()
   const ink = new Color(isDark ? '#ffffff' : '#0b0b0b')
-  const ink2 = new Color(isDark ? '#c3c2b7' : '#52514e')
+  const ink2 = new Color(isDark ? '#d1d0c9' : '#52514e')
   const ctx = new DrawContext()
   ctx.size = new Size(w, h)
   ctx.opaque = false
@@ -720,31 +723,31 @@ function buildHourly(spot, res, family) {
   const { data: d, at, stale } = res
   const s = summarize(d)
   const w = new ListWidget()
-  w.backgroundColor = C.bg
+  w.backgroundColor = D.bg
   w.url = spotLink(spot)
   w.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000)
   w.setPadding(10, 12, 8, 12)
   const head = w.addStack()
   head.centerAlignContent()
-  text(head, spot.name, 14, C.ink, 'bold')
+  text(head, spot.name, 14, D.ink, 'bold')
   head.addSpacer()
   const f = new DateFormatter()
   f.useNoDateStyle()
   f.useShortTimeStyle()
-  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v3', 9, stale ? C.warn : C.muted)
+  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v4', 9, stale ? C.warn : D.muted)
   const small = family === 'small'
   const large = family === 'large'
   if (large) {
     // Current conditions line: "7° ☾ · wind 3 g8 km/h · 0 °C 2370 m".
     const now = w.addStack()
     now.centerAlignContent()
-    text(now, n0(s.temp) + '°', 13, C.ink, 'semibold')
+    text(now, n0(s.temp) + '°', 13, D.ink, 'semibold')
     now.addSpacer(4)
     const sym = now.addImage(SFSymbol.named(wx(s.code, isNight())[0]).image)
     sym.imageSize = new Size(14, 14)
-    sym.tintColor = C.ink2
+    sym.tintColor = D.ink2
     now.addSpacer(6)
-    text(now, 'wind ' + n0(s.wind) + ' g' + n0(s.gust24) + ' km/h  ·  0 °C ' + fzlText(s.fzl), 11, C.ink2)
+    text(now, 'wind ' + n0(s.wind) + ' g' + n0(s.gust24) + ' km/h  ·  0 °C ' + fzlText(s.fzl), 11, D.ink2)
     w.addSpacer(6)
     if (res.daily) {
       const di = w.addImage(dailyPanel(res.daily, 316, 104))
@@ -762,9 +765,9 @@ function buildHourly(spot, res, family) {
   w.addSpacer()
   if (large) {
     const foot = w.addStack()
-    text(foot, 'Hourly: ' + d.models.map((m) => m.short).join(', ') + ' · 5-day: GDPS, IFS', 8, C.muted)
+    text(foot, 'Hourly: ' + d.models.map((m) => m.short).join(', ') + ' · 5-day: GDPS, IFS', 8, D.muted)
     foot.addSpacer()
-    text(foot, 'mm · cm · km/h', 8, C.muted)
+    text(foot, 'mm · cm · km/h', 8, D.muted)
   }
   return w
 }
