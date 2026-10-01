@@ -188,7 +188,7 @@ and RDPS. `public/widget-loader.js` is what users paste into Scriptable: it
 downloads `/widget.js` and runs it via `AsyncFunction('BASE', code)`, caching the
 code for offline use. Keep the `PEAKCAST_WIDGET` marker on line 1.
 Parameter: share link | `Name;lat;lon[;elev]` | `here`, optionally `| hourly`
-(DrawContext-rendered hourly strip). `/widget-install.html` copies the loader
+or `| summary` (medium/large default to the DrawContext-rendered hourly strip). Header shows the widget code version (v2) to spot stale deploys. `/widget-install.html` copies the loader
 with the site address pre-filled. Preview locally with `npm run widget:preview`.
 
 ## Conventions

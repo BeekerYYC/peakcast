@@ -1,4 +1,4 @@
-// PEAKCAST_WIDGET v1
+// PEAKCAST_WIDGET v2
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
 // Loaded by the small loader script (see README "iPhone widget"), or paste this
 // whole file into Scriptable and set APP below.
@@ -8,7 +8,8 @@
 //   - Name;lat;lon[;elevation]   e.g.  Mt Allan;50.97;-115.205;2819
 //   - here                       → your current location
 //   - empty → Kananaskis Village
-// Add "| hourly" for the hourly strip layout, e.g.  here | hourly
+// Medium/large show the hourly strip by default; add "| summary" for the
+// summary layout (or "| hourly" on a small widget).
 //
 // Data: Open-Meteo (CC BY 4.0). Models: HRDPS Continental, HRRR, RDPS.
 
@@ -48,9 +49,14 @@ function parseParam(param) {
   const raw = (param || '').trim()
   const bar = raw.lastIndexOf('|')
   const tail = bar >= 0 ? raw.slice(bar + 1).trim().toLowerCase() : ''
-  const style = tail === 'hourly' || raw.toLowerCase() === 'hourly' ? 'hourly' : 'summary'
+  const style =
+    tail === 'hourly' || raw.toLowerCase() === 'hourly'
+      ? 'hourly'
+      : tail === 'summary' || raw.toLowerCase() === 'summary'
+        ? 'summary'
+        : 'auto'
   let spec = bar >= 0 && (tail === 'hourly' || tail === 'summary') ? raw.slice(0, bar).trim() : raw
-  if (spec.toLowerCase() === 'hourly') spec = ''
+  if (spec.toLowerCase() === 'hourly' || spec.toLowerCase() === 'summary') spec = ''
   return { spec, style }
 }
 
@@ -382,10 +388,11 @@ const dark = () => (typeof Device !== 'undefined' && Device.isUsingDarkAppearanc
 /** Gust cell colours, roughly Windy-like: calm → none, then green, yellow, orange, red. */
 function gustFill(g) {
   if (g == null || g < 20) return null
-  if (g < 35) return new Color('#1baf7a', 0.85)
-  if (g < 50) return new Color('#eda100', 0.9)
-  if (g < 70) return new Color('#eb6834', 0.9)
-  return new Color('#d03b3b', 0.95)
+  if (g < 30) return new Color('#7fd34e')
+  if (g < 45) return new Color('#3fbf3f')
+  if (g < 60) return new Color('#eda100')
+  if (g < 80) return new Color('#eb6834')
+  return new Color('#d03b3b')
 }
 
 function arrow(ctx, cx, cy, fromDeg, r, color) {
@@ -403,12 +410,17 @@ function arrow(ctx, cx, cy, fromDeg, r, color) {
   ctx.fillPath()
 }
 
-/** Windy-style hourly strip: hour, icon, temp, wind, gust (coloured), direction. */
+/**
+ * Windy-style hourly strip: hour, icon, temperature over a temperature curve,
+ * precip, then a light panel with wind and colour-coded gusts, and direction
+ * arrows. Daytime columns are slightly lighter, like Windy.
+ */
 function hourlyTable(d, s, w, h, step, cols) {
   const isDark = dark()
   const ink = new Color(isDark ? '#ffffff' : '#0b0b0b')
   const ink2 = new Color(isDark ? '#c3c2b7' : '#52514e')
   const muted = new Color('#898781')
+  const panelInk = new Color('#1a1a19')
   const ctx = new DrawContext()
   ctx.size = new Size(w, h)
   ctx.opaque = false
@@ -418,9 +430,10 @@ function hourlyTable(d, s, w, h, step, cols) {
   hourFmt.dateFormat = 'H'
   const dayFmt = new DateFormatter()
   dayFmt.dateFormat = 'EEE'
-  const rows = { hour: 0, icon: 14, temp: 35, precip: 53, wind: 70, gust: 84, dir: 102 }
-  const scale = h / 114
-  const Y = (k) => rows[k] * scale
+  // Layout on a 120-unit grid, scaled to the image height.
+  const scale = h / 120
+  const R = { hour: 1, icon: 15, temp: 36, curveTop: 34, curveBot: 62, precip: 63, panel: 77, wind: 79, gust: 93, dir: 112 }
+  const Y = (k) => R[k] * scale
 
   const textAt = (str, x, y, size, color, bold) => {
     ctx.setFont(bold ? Font.semiboldSystemFont(size) : Font.systemFont(size))
@@ -428,66 +441,103 @@ function hourlyTable(d, s, w, h, step, cols) {
     ctx.setTextAlignedCenter()
     ctx.drawTextInRect(str, new Rect(x, y, cw, size + 4))
   }
+  const avg = (key, k) => {
+    const v = nums(d.models.map((m) => m[key][k]))
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+  }
 
+  // Columns to draw.
+  const colsData = []
   for (let c = 0; c < cols; c++) {
     const k = s.i + c * step
     if (k >= d.time.length) break
-    const x = c * cw
     const date = new Date(d.time[k] * 1000)
     const hr = Number(hourFmt.string(date))
+    colsData.push({ c, k, date, hr, night: hr < 7 || hr >= 20, temp: avg('temp', k) })
+  }
+
+  // 1. Daytime columns a touch lighter (top area only).
+  for (const col of colsData) {
+    if (col.night) continue
+    ctx.setFillColor(new Color(isDark ? '#ffffff' : '#000000', isDark ? 0.06 : 0.04))
+    ctx.fillRect(new Rect(col.c * cw, 0, cw, Y('panel') - 2))
+  }
+
+  // 2. Temperature curve: soft filled area under a line through column centres.
+  const tv = nums(colsData.map((c) => c.temp))
+  if (tv.length > 1) {
+    const lo = Math.min(...tv)
+    const hi = Math.max(...tv)
+    const top = Y('curveTop') + 14 * scale
+    const bot = Y('curveBot')
+    const Yt = (v) => bot - ((v - lo) / Math.max(2, hi - lo)) * (bot - top)
+    const pts = colsData.filter((c) => c.temp != null).map((c) => new Point(c.c * cw + cw / 2, Yt(c.temp)))
+    const area = new Path()
+    area.move(new Point(0, bot))
+    area.addLine(new Point(0, pts[0].y))
+    for (const p of pts) area.addLine(p)
+    area.addLine(new Point(colsData.length * cw, pts[pts.length - 1].y))
+    area.addLine(new Point(colsData.length * cw, bot))
+    area.closeSubpath()
+    ctx.addPath(area)
+    ctx.setFillColor(new Color(isDark ? '#8fb8a4' : '#1baf7a', isDark ? 0.28 : 0.18))
+    ctx.fillPath()
+  }
+
+  // 3. Light panel behind wind + gust rows (Windy's white band).
+  const panelH = 30 * scale
+  const panel = new Path()
+  panel.addRoundedRect(new Rect(0, Y('panel'), colsData.length * cw, panelH), 4, 4)
+  ctx.addPath(panel)
+  ctx.setFillColor(new Color('#f4f4f1', isDark ? 0.92 : 1))
+  ctx.fillPath()
+
+  for (const { c, k, date, hr, night, temp } of colsData) {
+    const x = c * cw
     const label = c === 0 ? 'Now' : hr === 0 ? dayFmt.string(date).toUpperCase().slice(0, 2) : String(hr)
-    textAt(label, x, Y('hour'), 10, hr === 0 && c > 0 ? ink : muted, hr === 0)
+    textAt(label, x, Y('hour'), 10, hr === 0 && c > 0 ? ink : muted, hr === 0 || c === 0)
 
-    const at = (key) => {
-      const v = nums(d.models.map((m) => m[key][k]))
-      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
-    }
-    // Over a multi-hour step, show the strongest gust in that block.
-    const gustBlock = () => {
-      const v = []
-      for (let j = k; j < k + step && j < d.time.length; j++) v.push(...nums(d.models.map((m) => m.gust[j])))
-      return v.length ? Math.max(...v) : null
-    }
     const code = d.models.map((m) => m.code[k]).find((v) => v != null)
-    const night = hr < 7 || hr >= 20
-    const sym = SFSymbol.named(wx(code, night)[0])
+    const symName = wx(code, night)[0]
+    const sym = SFSymbol.named(symName)
     sym.applyFont(Font.systemFont(16))
-    const img = sym.image
     const isz = 18 * scale
-    ctx.drawImageInRect(img, new Rect(x + (cw - isz) / 2, Y('icon'), isz, isz))
+    ctx.drawImageInRect(sym.image, new Rect(x + (cw - isz) / 2, Y('icon'), isz, isz))
 
-    textAt(n0(at('temp')) + '°', x, Y('temp'), 12, ink, true)
+    textAt(n0(temp) + '°', x, Y('temp'), 12, ink, true)
 
     // Precip over the column's block: snow (cm) if any, else rain/total (mm).
     const blockSum = (key) => {
-      const per = d.models.map((m) => {
-        const v = nums(m[key].slice(k, k + step))
-        return v.length ? v.reduce((a, b) => a + b, 0) : null
-      })
-      const v = nums(per)
-      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+      const per = nums(
+        d.models.map((m) => {
+          const v = nums(m[key].slice(k, k + step))
+          return v.length ? v.reduce((a, b) => a + b, 0) : null
+        }),
+      )
+      return per.length ? per.reduce((a, b) => a + b, 0) / per.length : null
     }
     const sn = blockSum('snow')
     const pr = blockSum('precip')
     const isSnow = sn != null && sn >= 0.1
     const amt = isSnow ? sn : pr
     if (amt != null && amt >= 0.1) {
-      const strength = Math.min(1, 0.35 + amt / (isSnow ? 2 : 3))
+      const strength = Math.min(1, 0.4 + amt / (isSnow ? 2 : 3))
       ctx.setFillColor(new Color(isSnow ? '#7fb2ee' : '#2a78d6', strength))
-      ctx.fillRect(new Rect(x + 0.5, Y('precip') - 1, cw - 1, 15 * scale))
-      textAt(amt < 10 ? n1(amt) : n0(amt), x, Y('precip'), 9.5, new Color('#ffffff'), true)
-    } else {
-      textAt('·', x, Y('precip'), 10, muted, false)
+      ctx.fillRect(new Rect(x + 1, Y('precip'), cw - 2, 12 * scale))
+      textAt(amt < 10 ? n1(amt) : n0(amt), x, Y('precip') - 0.5, 9, new Color('#ffffff'), true)
     }
-    textAt(n0(at('wind')), x, Y('wind'), 10, ink2, false)
 
-    const g = gustBlock()
+    // Wind (top line of the panel) and gust cell (bottom line).
+    textAt(n0(avg('wind', k)), x, Y('wind'), 10.5, panelInk, false)
+    const gv = []
+    for (let j = k; j < k + step && j < d.time.length; j++) gv.push(...nums(d.models.map((m) => m.gust[j])))
+    const g = gv.length ? Math.max(...gv) : null
     const fill = gustFill(g)
     if (fill) {
       ctx.setFillColor(fill)
-      ctx.fillRect(new Rect(x + 0.5, Y('gust') - 1, cw - 1, 16 * scale))
+      ctx.fillRect(new Rect(x, Y('gust') - 1, cw + 0.5, 15 * scale))
     }
-    textAt(n0(g), x, Y('gust'), 10, fill ? new Color('#ffffff') : ink2, !!fill)
+    textAt(n0(g), x, Y('gust'), 10.5, panelInk, !!fill)
 
     const dirs = nums(d.models.map((m) => (m.dir ? m.dir[k] : null)))
     if (dirs.length) {
@@ -498,15 +548,14 @@ function hourlyTable(d, s, w, h, step, cols) {
         sy += Math.sin((v * Math.PI) / 180)
       }
       const deg = (Math.atan2(sy, sx) * 180) / Math.PI
-      arrow(ctx, x + cw / 2, Y('dir') + 6 * scale, deg, 5 * scale, ink2)
+      arrow(ctx, x + cw / 2, Y('dir'), deg, 5 * scale, ink2)
     }
-    // Midnight divider.
     if (hr === 0 && c > 0) {
       const p = new Path()
       p.move(new Point(x, 0))
-      p.addLine(new Point(x, h))
+      p.addLine(new Point(x, Y('panel') - 2))
       ctx.addPath(p)
-      ctx.setStrokeColor(new Color('#898781', 0.35))
+      ctx.setStrokeColor(new Color('#898781', 0.45))
       ctx.setLineWidth(1)
       ctx.strokePath()
     }
@@ -672,7 +721,7 @@ function buildHourly(spot, res, family) {
   const f = new DateFormatter()
   f.useNoDateStyle()
   f.useShortTimeStyle()
-  text(head, (stale ? 'offline · ' : '') + 'Peakcast · ' + f.string(new Date(at)), 9, stale ? C.warn : C.muted)
+  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v2', 9, stale ? C.warn : C.muted)
   const small = family === 'small'
   const large = family === 'large'
   if (large) {
@@ -801,8 +850,11 @@ const fromWidgetTap = !config.runsInWidget && param != null
 // This is also what makes iOS show the location permission prompt, which a
 // widget alone can't trigger.
 const manual = !config.runsInWidget && !fromWidgetTap
-const { spec, style } = parseParam(manual ? 'here | hourly' : param)
+const parsed = parseParam(manual ? 'here | hourly' : param)
+const spec = parsed.spec
 const family = config.runsInWidget ? config.widgetFamily || 'small' : manual ? 'large' : 'medium'
+// Medium and large default to the hourly strip; small defaults to the summary.
+const style = parsed.style === 'auto' ? (family === 'small' ? 'summary' : 'hourly') : parsed.style
 let spot = parseSpot(spec)
 let widget
 try {
