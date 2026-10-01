@@ -409,6 +409,10 @@ try {
 } catch (e) {
   widget = errorWidget(spot, e)
 }
+const fromWidgetTap = !config.runsInWidget && typeof args !== 'undefined' && args.widgetParameter != null
+console.log('Peakcast widget: ' + spot.name + ' · ' + family + (fromWidgetTap ? ' · opened from widget tap' : ''))
 if (config.runsInWidget) Script.setWidget(widget)
+// Widget set to "Run Script": a tap lands here, so jump to Peakcast.
+else if (fromWidgetTap) Safari.open(spotLink(spot))
 else await widget.presentMedium()
 Script.complete()
