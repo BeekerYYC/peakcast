@@ -1,4 +1,4 @@
-// PEAKCAST_WIDGET v2
+// PEAKCAST_WIDGET v3
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
 // Loaded by the small loader script (see README "iPhone widget"), or paste this
 // whole file into Scriptable and set APP below.
@@ -29,6 +29,7 @@ const VARS = [
   'wind_speed_10m',
   'wind_gusts_10m',
   'wind_direction_10m',
+  'cloud_cover',
   'weather_code',
   'freezing_level_height',
 ]
@@ -179,6 +180,7 @@ function normalize(raw) {
       wind: get('wind_speed_10m') || [],
       gust: get('wind_gusts_10m') || [],
       dir: get('wind_direction_10m') || [],
+      cloud: get('cloud_cover') || [],
       code: get('weather_code') || [],
       fzl,
     })
@@ -463,6 +465,14 @@ function hourlyTable(d, s, w, h, step, cols) {
     ctx.fillRect(new Rect(col.c * cw, 0, cw, Y('panel') - 2))
   }
 
+  // 1b. Cloud cover: grey wash behind the icon row, darker = cloudier.
+  for (const col of colsData) {
+    const cc = avg('cloud', col.k)
+    if (cc == null || cc < 10) continue
+    ctx.setFillColor(new Color(isDark ? '#c3c2b7' : '#898781', (cc / 100) * (isDark ? 0.32 : 0.3)))
+    ctx.fillRect(new Rect(col.c * cw + 0.5, Y('icon') - 2 * scale, cw - 1, 22 * scale))
+  }
+
   // 2. Temperature curve: soft filled area under a line through column centres.
   const tv = nums(colsData.map((c) => c.temp))
   if (tv.length > 1) {
@@ -721,7 +731,7 @@ function buildHourly(spot, res, family) {
   const f = new DateFormatter()
   f.useNoDateStyle()
   f.useShortTimeStyle()
-  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v2', 9, stale ? C.warn : C.muted)
+  text(head, (stale ? 'offline · ' : '') + f.string(new Date(at)) + ' · v3', 9, stale ? C.warn : C.muted)
   const small = family === 'small'
   const large = family === 'large'
   if (large) {

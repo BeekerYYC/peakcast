@@ -83,3 +83,26 @@ describe('bucketSum', () => {
     expect(bucketSum(s, tl, 6)).toEqual([3, 3, 3, 3, 3, 3, 3, 3, 3, 2])
   })
 })
+
+import { consensus, runningTotal } from '../src/data/consensus'
+import type { ModelSeries } from '../src/data/types'
+
+describe('consensus', () => {
+  const mk = (id: string, t0: number, vals: (number | null)[]): ModelSeries => ({
+    modelId: id,
+    time: vals.map((_, i) => t0 + i * 3600),
+    vars: { precipitation: vals },
+    freezingLevel: 'none',
+    elevation: 0,
+    timezone: 'UTC',
+    covered: true,
+  })
+  it('averages models per hour and ignores missing values', () => {
+    const times = [0, 3600, 7200]
+    const out = consensus([mk('a', 0, [1, null, 3]), mk('b', 3600, [2, 5])], 'precipitation', times)
+    expect(out).toEqual([1, 2, 4])
+  })
+  it('running total keeps gaps', () => {
+    expect(runningTotal([0.5, null, 1, 0])).toEqual([0.5, null, 1.5, 1.5])
+  })
+})

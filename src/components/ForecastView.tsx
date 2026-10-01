@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { HORIZONS_BY_ID, PAST_HOURS } from '../config/horizons'
 import type { Spot } from '../config/spots'
 import { buildTimeline } from '../data/timeline'
@@ -8,6 +8,7 @@ import { useResolvedTheme } from '../lib/theme'
 import { usePrefs, visibleModelsFor } from '../state/prefs'
 import { buildChartData } from './charts/buildData'
 import { ChartCard } from './charts/ChartCard'
+import { PrecipCloudCard } from './charts/PrecipCloudCard'
 import { CHARTS, type ChartCtx } from './charts/chartDefs'
 import { DailySummary } from './DailySummary'
 import { ModelChips } from './ModelChips'
@@ -80,7 +81,12 @@ export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
           <ScrubBar tl={tl} precipMode={precipMode} aggHours={aggHours} onPrecipMode={setPrecipMode} />
           <div className="flex flex-col gap-2.5">
             {charts.map(({ def, cd }) => (
-              <ChartCard key={def.id} def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX />
+              <Fragment key={def.id}>
+                <ChartCard def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX />
+                {def.id === 'temp' && (
+                  <PrecipCloudCard models={models} tl={tl} theme={theme} aggHours={aggHours} />
+                )}
+              </Fragment>
             ))}
           </div>
         </motion.div>

@@ -8,10 +8,14 @@ const BASE = 'https://YOUR-APP.vercel.app'
 const fm = FileManager.local()
 const file = fm.joinPath(fm.documentsDirectory(), 'peakcast-widget-code.js')
 try {
-  const req = new Request(BASE + '/widget.js')
+  // Cache-buster so iOS never hands back an old copy.
+  const req = new Request(BASE + '/widget.js?t=' + Date.now())
   req.timeoutInterval = 15
   const code = await req.loadString()
-  if (code.includes('PEAKCAST_WIDGET')) fm.writeString(file, code)
+  if (code.includes('PEAKCAST_WIDGET')) {
+    fm.writeString(file, code)
+    console.log('Loaded ' + code.split('\n')[0].replace('// ', '') + ' from ' + BASE)
+  }
   else console.log('Downloaded something that is not the widget. Is BASE right? Got: ' + code.slice(0, 80))
 } catch {
   console.log('Could not reach ' + BASE + '/widget.js, using saved copy')
