@@ -34,11 +34,18 @@ export async function fetchModels(
   const ens = modelIds.filter((id) => getModel(id).api === 'ensemble')
   const metaP = Promise.all(modelIds.map(async (id) => [id, await fetchMeta(id)] as const))
 
+  // Short-range and long-range models go in separate requests so the short
+  // ones don't drag along hundreds of hours of nulls.
+  const groups = new Map<string, string[]>()
+  for (const id of det) {
+    const k = getModel(id).maxHours <= 96 ? 'short' : 'long'
+    groups.set(k, [...(groups.get(k) ?? []), id])
+  }
   const jobs: Promise<ReturnType<typeof normalizeForecast>>[] = []
-  if (det.length) {
+  for (const ids of groups.values()) {
     jobs.push(
-      getJson<RawResponse>(buildForecastUrl(spot, det), signal).then((raw) =>
-        normalizeForecast(raw, withCompanions(det)),
+      getJson<RawResponse>(buildForecastUrl(spot, ids), signal).then((raw) =>
+        normalizeForecast(raw, withCompanions(ids)),
       ),
     )
   }
