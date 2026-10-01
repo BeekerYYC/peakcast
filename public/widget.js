@@ -6,7 +6,9 @@
 // Widget parameter (long-press widget → Edit Widget → Parameter), any of:
 //   - a Peakcast share link (Share → Copy in the app)
 //   - Name;lat;lon[;elevation]   e.g.  Mt Allan;50.97;-115.205;2819
+//   - here                       → your current location
 //   - empty → Kananaskis Village
+// Add "| hourly" for the hourly strip layout, e.g.  here | hourly
 //
 // Data: Open-Meteo (CC BY 4.0). Models: HRDPS Continental, HRRR, RDPS.
 
@@ -25,6 +27,7 @@ const VARS = [
   'snowfall',
   'wind_speed_10m',
   'wind_gusts_10m',
+  'wind_direction_10m',
   'weather_code',
   'freezing_level_height',
 ]
@@ -39,6 +42,42 @@ const C = {
 }
 
 // ---------- spot ----------
+
+/** Split "spot spec | style" from the widget parameter. */
+function parseParam(param) {
+  const raw = (param || '').trim()
+  const bar = raw.lastIndexOf('|')
+  const tail = bar >= 0 ? raw.slice(bar + 1).trim().toLowerCase() : ''
+  const style = tail === 'hourly' || raw.toLowerCase() === 'hourly' ? 'hourly' : 'summary'
+  let spec = bar >= 0 && (tail === 'hourly' || tail === 'summary') ? raw.slice(0, bar).trim() : raw
+  if (spec.toLowerCase() === 'hourly') spec = ''
+  return { spec, style }
+}
+
+/** Current location, named after the neighbourhood; falls back to the last fix. */
+async function hereSpot() {
+  const fm = FileManager.local()
+  const file = fm.joinPath(fm.cacheDirectory(), 'peakcast-here.json')
+  try {
+    Location.setAccuracyToHundredMeters()
+    const loc = await Location.current()
+    const lat = Math.round(loc.latitude * 1e4) / 1e4
+    const lon = Math.round(loc.longitude * 1e4) / 1e4
+    let name = 'Here'
+    try {
+      const g = (await Location.reverseGeocode(lat, lon))[0]
+      if (g) name = g.subLocality || g.locality || g.name || name
+    } catch {
+      /* keep "Here" */
+    }
+    const spot = { name, lat, lon, elev: null, slug: 'here-' + slugify(name) }
+    fm.writeString(file, JSON.stringify(spot))
+    return spot
+  } catch (e) {
+    if (fm.fileExists(file)) return JSON.parse(fm.readString(file))
+    throw new Error('Location unavailable. Allow Scriptable location access in iOS Settings.')
+  }
+}
 
 function parseSpot(param) {
   const fallback = { name: 'Kananaskis Village', lat: 50.91598, lon: -115.14156, elev: null }
@@ -133,6 +172,7 @@ function normalize(raw) {
       snow: get('snowfall') || [],
       wind: get('wind_speed_10m') || [],
       gust: get('wind_gusts_10m') || [],
+      dir: get('wind_direction_10m') || [],
       code: get('weather_code') || [],
       fzl,
     })
@@ -300,6 +340,143 @@ function sparkline(d, s, w, h) {
   return ctx.getImage()
 }
 
+const dark = () => (typeof Device !== 'undefined' && Device.isUsingDarkAppearance ? Device.isUsingDarkAppearance() : true)
+
+/** Gust cell colours, roughly Windy-like: calm → none, then green, yellow, orange, red. */
+function gustFill(g) {
+  if (g == null || g < 20) return null
+  if (g < 35) return new Color('#1baf7a', 0.85)
+  if (g < 50) return new Color('#eda100', 0.9)
+  if (g < 70) return new Color('#eb6834', 0.9)
+  return new Color('#d03b3b', 0.95)
+}
+
+function arrow(ctx, cx, cy, fromDeg, r, color) {
+  // Arrow points downwind (meteorological direction is where wind comes from).
+  const a = ((fromDeg + 180) * Math.PI) / 180
+  const pt = (x, y) => new Point(cx + x * Math.cos(a) - y * Math.sin(a), cy + x * Math.sin(a) + y * Math.cos(a))
+  const p = new Path()
+  p.move(pt(0, -r))
+  p.addLine(pt(r * 0.75, r))
+  p.addLine(pt(0, r * 0.45))
+  p.addLine(pt(-r * 0.75, r))
+  p.closeSubpath()
+  ctx.addPath(p)
+  ctx.setFillColor(color)
+  ctx.fillPath()
+}
+
+/** Windy-style hourly strip: hour, icon, temp, wind, gust (coloured), direction. */
+function hourlyTable(d, s, w, h, step, cols) {
+  const isDark = dark()
+  const ink = new Color(isDark ? '#ffffff' : '#0b0b0b')
+  const ink2 = new Color(isDark ? '#c3c2b7' : '#52514e')
+  const muted = new Color('#898781')
+  const ctx = new DrawContext()
+  ctx.size = new Size(w, h)
+  ctx.opaque = false
+  ctx.respectScreenScale = true
+  const cw = w / cols
+  const hourFmt = new DateFormatter()
+  hourFmt.dateFormat = 'H'
+  const dayFmt = new DateFormatter()
+  dayFmt.dateFormat = 'EEE'
+  const rows = { hour: 0, icon: 14, temp: 35, precip: 53, wind: 70, gust: 84, dir: 102 }
+  const scale = h / 114
+  const Y = (k) => rows[k] * scale
+
+  const textAt = (str, x, y, size, color, bold) => {
+    ctx.setFont(bold ? Font.semiboldSystemFont(size) : Font.systemFont(size))
+    ctx.setTextColor(color)
+    ctx.setTextAlignedCenter()
+    ctx.drawTextInRect(str, new Rect(x, y, cw, size + 4))
+  }
+
+  for (let c = 0; c < cols; c++) {
+    const k = s.i + c * step
+    if (k >= d.time.length) break
+    const x = c * cw
+    const date = new Date(d.time[k] * 1000)
+    const hr = Number(hourFmt.string(date))
+    const label = c === 0 ? 'Now' : hr === 0 ? dayFmt.string(date).toUpperCase().slice(0, 2) : String(hr)
+    textAt(label, x, Y('hour'), 10, hr === 0 && c > 0 ? ink : muted, hr === 0)
+
+    const at = (key) => {
+      const v = nums(d.models.map((m) => m[key][k]))
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+    }
+    // Over a multi-hour step, show the strongest gust in that block.
+    const gustBlock = () => {
+      const v = []
+      for (let j = k; j < k + step && j < d.time.length; j++) v.push(...nums(d.models.map((m) => m.gust[j])))
+      return v.length ? Math.max(...v) : null
+    }
+    const code = d.models.map((m) => m.code[k]).find((v) => v != null)
+    const night = hr < 7 || hr >= 20
+    const sym = SFSymbol.named(wx(code, night)[0])
+    sym.applyFont(Font.systemFont(16))
+    const img = sym.image
+    const isz = 18 * scale
+    ctx.drawImageInRect(img, new Rect(x + (cw - isz) / 2, Y('icon'), isz, isz))
+
+    textAt(n0(at('temp')) + '°', x, Y('temp'), 12, ink, true)
+
+    // Precip over the column's block: snow (cm) if any, else rain/total (mm).
+    const blockSum = (key) => {
+      const per = d.models.map((m) => {
+        const v = nums(m[key].slice(k, k + step))
+        return v.length ? v.reduce((a, b) => a + b, 0) : null
+      })
+      const v = nums(per)
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+    }
+    const sn = blockSum('snow')
+    const pr = blockSum('precip')
+    const isSnow = sn != null && sn >= 0.1
+    const amt = isSnow ? sn : pr
+    if (amt != null && amt >= 0.1) {
+      const strength = Math.min(1, 0.35 + amt / (isSnow ? 2 : 3))
+      ctx.setFillColor(new Color(isSnow ? '#7fb2ee' : '#2a78d6', strength))
+      ctx.fillRect(new Rect(x + 0.5, Y('precip') - 1, cw - 1, 15 * scale))
+      textAt(amt < 10 ? n1(amt) : n0(amt), x, Y('precip'), 9.5, new Color('#ffffff'), true)
+    } else {
+      textAt('·', x, Y('precip'), 10, muted, false)
+    }
+    textAt(n0(at('wind')), x, Y('wind'), 10, ink2, false)
+
+    const g = gustBlock()
+    const fill = gustFill(g)
+    if (fill) {
+      ctx.setFillColor(fill)
+      ctx.fillRect(new Rect(x + 0.5, Y('gust') - 1, cw - 1, 16 * scale))
+    }
+    textAt(n0(g), x, Y('gust'), 10, fill ? new Color('#ffffff') : ink2, !!fill)
+
+    const dirs = nums(d.models.map((m) => (m.dir ? m.dir[k] : null)))
+    if (dirs.length) {
+      let sx = 0
+      let sy = 0
+      for (const v of dirs) {
+        sx += Math.cos((v * Math.PI) / 180)
+        sy += Math.sin((v * Math.PI) / 180)
+      }
+      const deg = (Math.atan2(sy, sx) * 180) / Math.PI
+      arrow(ctx, x + cw / 2, Y('dir') + 6 * scale, deg, 5 * scale, ink2)
+    }
+    // Midnight divider.
+    if (hr === 0 && c > 0) {
+      const p = new Path()
+      p.move(new Point(x, 0))
+      p.addLine(new Point(x, h))
+      ctx.addPath(p)
+      ctx.setStrokeColor(new Color('#898781', 0.35))
+      ctx.setLineWidth(1)
+      ctx.strokePath()
+    }
+  }
+  return ctx.getImage()
+}
+
 function text(stack, str, size, color, weight) {
   const t = stack.addText(str)
   t.font = weight === 'bold' ? Font.boldSystemFont(size) : weight === 'semibold' ? Font.semiboldSystemFont(size) : Font.systemFont(size)
@@ -315,6 +492,43 @@ function statRow(stack, label, value) {
   text(r, label, 11, C.muted)
   r.addSpacer()
   text(r, value, 12, C.ink, 'semibold')
+}
+
+function buildHourly(spot, res, family) {
+  const { data: d, at, stale } = res
+  const s = summarize(d)
+  const w = new ListWidget()
+  w.backgroundColor = C.bg
+  w.url = spotLink(spot)
+  w.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000)
+  w.setPadding(10, 12, 8, 12)
+  const head = w.addStack()
+  head.centerAlignContent()
+  text(head, spot.name, 14, C.ink, 'bold')
+  head.addSpacer()
+  const f = new DateFormatter()
+  f.useNoDateStyle()
+  f.useShortTimeStyle()
+  text(head, (stale ? 'offline · ' : '') + 'Peakcast · ' + f.string(new Date(at)), 9, stale ? C.warn : C.muted)
+  w.addSpacer(4)
+  const small = family === 'small'
+  const cols = small ? 5 : family === 'large' ? 12 : 12
+  const step = family === 'large' ? 3 : 1
+  const iw = small ? 130 : 316
+  const ih = family === 'large' ? 130 : 112
+  const img = w.addImage(hourlyTable(d, s, iw, ih, step, cols))
+  img.imageSize = new Size(iw, ih)
+  if (family === 'large') {
+    w.addSpacer(8)
+    statRow(w, '0 °C level', fzlText(s.fzl))
+    statRow(w, 'Next 24 h', precipText(s))
+    statRow(w, 'Max gust 24 h', n0(s.gust24) + ' km/h')
+    w.addSpacer()
+    text(w, '3-hourly · rain mm / snow cm · wind km/h · ' + d.models.map((m) => m.short).join(', '), 9, C.muted)
+  } else {
+    w.addSpacer()
+  }
+  return w
 }
 
 function build(spot, res, family) {
@@ -401,11 +615,14 @@ function errorWidget(spot, e) {
 
 // ---------- run ----------
 
-const spot = parseSpot(typeof args !== 'undefined' ? args.widgetParameter : null)
+const { spec, style } = parseParam(typeof args !== 'undefined' ? args.widgetParameter : null)
 const family = config.runsInWidget ? config.widgetFamily || 'small' : 'medium'
+let spot = parseSpot(spec)
 let widget
 try {
-  widget = build(spot, await load(spot), family)
+  if (spec.toLowerCase() === 'here') spot = await hereSpot()
+  const res = await load(spot)
+  widget = style === 'hourly' ? buildHourly(spot, res, family) : build(spot, res, family)
 } catch (e) {
   widget = errorWidget(spot, e)
 }

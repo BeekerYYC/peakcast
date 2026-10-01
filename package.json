@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "fixtures": "tsx scripts/record-fixtures.ts",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "shot": "tsx scripts/shot.ts"
+    "shot": "tsx scripts/shot.ts",
+    "widget:preview": "tsx scripts/widget-preview.mts"
   },
   "dependencies": {
     "idb-keyval": "^6.3.0",
