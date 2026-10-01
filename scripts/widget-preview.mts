@@ -32,7 +32,6 @@ await page.route('**/*', async (r) => {
 await page.addInitScript('window.__name = (f) => f')
 await page.goto('https://mock.local/')
 const result = await page.evaluate(async ({ code, family, param }) => {
-  const W: any = window as any
   class Color { constructor(public h: string, public a = 1) {} static dynamic(_l: any, d: any) { return d } css() { const n = parseInt(this.h.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${this.a})` } }
   class Size { constructor(public width: number, public height: number) {} }
   class Point { constructor(public x: number, public y: number) {} }

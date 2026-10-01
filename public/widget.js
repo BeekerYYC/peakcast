@@ -73,7 +73,7 @@ async function hereSpot() {
     const spot = { name, lat, lon, elev: null, slug: 'here-' + slugify(name) }
     fm.writeString(file, JSON.stringify(spot))
     return spot
-  } catch (e) {
+  } catch {
     if (fm.fileExists(file)) return JSON.parse(fm.readString(file))
     throw new Error('Location unavailable. Allow Scriptable location access in iOS Settings.')
   }
