@@ -164,6 +164,16 @@ src/
   `setWorkerUrl()` with Vite's `?worker&url` import of
   `maplibre-gl/dist/maplibre-gl-worker.mjs`.
 
+### Written outlook
+`src/data/narrative.ts` turns the forecast into plain language with rules (no
+network, works offline): `dayStats()` picks the best models per day (short-range
+≤96 h, else long-range deterministic, else GEPS; a model must cover 80% of the
+day), `describeDay()` writes sky + precip (type, timing, amount range; "likely"/
+"possible" when only some models are wet) + temps + snow line + wind + model
+disagreement, and `describeWeekend()` adds Sat/Sun with a "better day" pick from
+Wednesday to Saturday. Shown by `DayOutlook` under the Now card; it follows the
+day picked in the day cards. Unit tested in `tests/narrative.test.ts`.
+
 ### Charting library: uPlot
 Chosen for dense multi-series time series on phones. ~50 KB and canvas
 rendered, so 8 models × 384 hours × 5 charts stays at 60 fps where SVG libs

@@ -11,6 +11,7 @@ import { ChartCard } from './charts/ChartCard'
 import { PrecipCloudCard } from './charts/PrecipCloudCard'
 import { CHARTS, type ChartCtx } from './charts/chartDefs'
 import { DailySummary } from './DailySummary'
+import { DayOutlook } from './DayOutlook'
 import { ModelChips } from './ModelChips'
 import { NowHero } from './NowHero'
 import { ScrubBar } from './ScrubBar'
@@ -47,6 +48,11 @@ export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
     () => ids.map((id) => data[id]?.series).filter((s): s is ModelSeries => !!s && s.covered),
     [ids, data],
   )
+  // The written outlook uses every model for the spot, whatever the tab.
+  const allModels = useMemo(
+    () => Object.values(data).map((c) => c.series).filter((s) => s.covered),
+    [data],
+  )
   const tz = models[0]?.timezone ?? Object.values(data)[0]?.series.timezone ?? 'America/Edmonton'
   const elevation = models[0]?.elevation ?? spot.elevation ?? 0
 
@@ -77,6 +83,7 @@ export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
           transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
         >
           <NowHero models={models} tl={tl} />
+          <DayOutlook models={allModels} tl={tl} elevation={elevation} />
           <DailySummary models={models} tl={tl} />
           <ScrubBar tl={tl} precipMode={precipMode} aggHours={aggHours} onPrecipMode={setPrecipMode} />
           <div className="flex flex-col gap-2.5">
