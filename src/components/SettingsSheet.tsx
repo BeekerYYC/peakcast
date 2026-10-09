@@ -95,6 +95,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
             </button>
           </div>
         </section>
+        <p className="text-center text-[11px] text-muted">Peakcast build {__BUILD__}</p>
       </div>
     </Sheet>
   )

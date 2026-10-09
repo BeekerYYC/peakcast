@@ -5,10 +5,12 @@ import App from './App.tsx'
 import { pruneCache } from './data/cache'
 import { applyStartupLink } from './lib/deeplink'
 import { isStandalone } from './lib/pwa'
+import { setupServiceWorker } from './lib/sw'
 
 applyStartupLink(location.search, isStandalone())
 // Keep IndexedDB bounded: drop forecasts nobody has looked at for 3 weeks.
 void pruneCache(21 * 24 * 3600 * 1000)
+setupServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

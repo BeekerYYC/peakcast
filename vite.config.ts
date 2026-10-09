@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vitest/config'
 
+// Shown in Settings so it's obvious which version the phone is running.
+const BUILD = `${(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)} · ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`
+
 const tileCache = (name: string, pattern: RegExp) => ({
   urlPattern: pattern,
   handler: 'CacheFirst' as const,
@@ -14,12 +17,14 @@ const tileCache = (name: string, pattern: RegExp) => ({
 })
 
 export default defineConfig({
+  define: { __BUILD__: JSON.stringify(BUILD) },
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // Registered manually in src/lib/sw.ts so we can check for updates on launch.
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'favicon-32.png'],
       manifest: {
         id: '/',
@@ -40,6 +45,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Widget files must always come fresh from the network (Scriptable and
+        // the setup page read them), never from the app's offline copy.
+        globIgnores: ['**/widget*.js', '**/widget-install.html'],
         // MapPicker (MapLibre) is ~1 MB; precache it so the map opens offline.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',

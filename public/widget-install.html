@@ -37,7 +37,7 @@
 <script>
   const el = document.getElementById('code')
   let code = ''
-  fetch('/widget.js', { cache: 'no-store' })
+  fetch('/widget.js?t=' + Date.now(), { cache: 'no-store' })
     .then((r) => r.text())
     .then((t) => {
       code = t.replace("'https://YOUR-APP.vercel.app'", "'" + location.origin + "'")

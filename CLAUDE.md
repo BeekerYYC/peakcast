@@ -149,7 +149,11 @@ src/
   standalone`, apple-touch-icons, `viewport-fit=cover`, safe-area insets.
   Forecast data is cached by the app (IndexedDB), not Workbox, so the
   "fetched at" label stays accurate. Map tiles use Workbox runtime cache
-  (bounded).
+  (bounded). The SW is registered in `src/lib/sw.ts`, which checks for a new
+  version on every launch/foreground (iOS home-screen apps rarely do on their
+  own) and auto-reloads. `widget*.js` and `widget-install.html` are excluded
+  from precache so Scriptable and the setup page always get the live files.
+  Settings shows the build id (commit · time).
 - **iOS home-screen per spot**: the address bar always holds the full,
   self-contained spot link (`?spot=&name=&lat=&lon=[&elev=]`). On iOS
   (`navigator.standalone` defined) the manifest `<link>` is swapped for a
@@ -202,7 +206,7 @@ remote version is newer. **On every widget change bump both the line-1 marker
 `public/widget-loader.js` is a legacy alternative that runs the remote code via
 `AsyncFunction('BASE', code)`.
 Parameter: share link | `Name;lat;lon[;elev]` | `here`, optionally `| hourly`
-or `| summary` (medium/large default to the DrawContext-rendered hourly strip). Header shows the widget code version (v3) to spot stale code. `/widget-install.html` copies the loader
+or `| summary` (medium/large default to the DrawContext-rendered hourly strip). Header shows the widget code version to spot stale code. `/widget-install.html` copies the full widget
 with the site address pre-filled. Preview locally with `npm run widget:preview`.
 
 ## Conventions
