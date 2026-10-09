@@ -1,4 +1,4 @@
-// PEAKCAST_WIDGET v6
+// PEAKCAST_WIDGET v7
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
 // Paste this whole file into Scriptable (copy it from <your site>/widget-install.html,
 // which fills in APP). It updates itself: each run checks APP/widget.js and, if
@@ -438,7 +438,7 @@ function hourlyTable(d, s, w, h, step, cols) {
   dayFmt.dateFormat = 'EEE'
   // Layout on a 120-unit grid, scaled to the image height.
   const scale = h / 120
-  const R = { hour: 1, icon: 15, temp: 36, curveTop: 34, curveBot: 62, precip: 63, panel: 77, wind: 79, gust: 93, dir: 112 }
+  const R = { hour: 1, icon: 15, temp: 36, amount: 51, waveTop: 58, waveBase: 75, panel: 77, wind: 79, gust: 93, dir: 112 }
   const Y = (k) => R[k] * scale
 
   const textAt = (str, x, y, size, color, bold) => {
@@ -477,25 +477,42 @@ function hourlyTable(d, s, w, h, step, cols) {
     ctx.fillRect(new Rect(col.c * cw + 0.5, Y('icon') - 2 * scale, cw - 1, 22 * scale))
   }
 
-  // 2. Temperature curve: soft filled area under a line through column centres.
-  const tv = nums(colsData.map((c) => c.temp))
-  if (tv.length > 1) {
-    const lo = Math.min(...tv)
-    const hi = Math.max(...tv)
-    const top = Y('curveTop') + 14 * scale
-    const bot = Y('curveBot')
-    const Yt = (v) => bot - ((v - lo) / Math.max(2, hi - lo)) * (bot - top)
-    const pts = colsData.filter((c) => c.temp != null).map((c) => new Point(c.c * cw + cw / 2, Yt(c.temp)))
-    const area = new Path()
-    area.move(new Point(0, bot))
-    area.addLine(new Point(0, pts[0].y))
-    for (const p of pts) area.addLine(p)
-    area.addLine(new Point(colsData.length * cw, pts[pts.length - 1].y))
-    area.addLine(new Point(colsData.length * cw, bot))
-    area.closeSubpath()
-    ctx.addPath(area)
-    ctx.setFillColor(new Color(isDark ? '#8fb8a4' : '#1baf7a', isDark ? 0.28 : 0.18))
-    ctx.fillPath()
+  // 2. Precipitation waves under the temperatures: white = snow (from the
+  //    ground up), blue = rain on top; taller = more. One point per column.
+  const blockSum = (key, k) => {
+    const per = nums(
+      d.models.map((m) => {
+        const v = nums(m[key].slice(k, k + step))
+        return v.length ? v.reduce((a, b) => a + b, 0) : null
+      }),
+    )
+    return per.length ? per.reduce((a, b) => a + b, 0) / per.length : 0
+  }
+  for (const col of colsData) {
+    col.precip = blockSum('precip', col.k)
+    col.snow = blockSum('snow', col.k)
+    col.snowWater = Math.min(col.precip, col.snow / 0.7)
+  }
+  {
+    const base = Y('waveBase')
+    const top = Y('waveTop')
+    const peak = Math.max(1.5 * step, ...colsData.map((c) => c.precip))
+    const Yp = (mm) => (mm > 0.02 ? base - Math.sqrt(Math.min(mm, peak) / peak) * (base - top) : base)
+    const area = (vals, color) => {
+      if (!vals.some((v) => v > 0.02)) return
+      const p = new Path()
+      p.move(new Point(0, base))
+      p.addLine(new Point(0, Yp(vals[0])))
+      vals.forEach((v, j) => p.addLine(new Point(j * cw + cw / 2, Yp(v))))
+      p.addLine(new Point(vals.length * cw, Yp(vals[vals.length - 1])))
+      p.addLine(new Point(vals.length * cw, base))
+      p.closeSubpath()
+      ctx.addPath(p)
+      ctx.setFillColor(color)
+      ctx.fillPath()
+    }
+    area(colsData.map((c) => c.precip), new Color('#3987e5', 0.85))
+    area(colsData.map((c) => c.snowWater), new Color('#f2f4f7', 0.95))
   }
 
   // 3. Light panel behind wind + gust rows (Windy's white band).
@@ -520,25 +537,12 @@ function hourlyTable(d, s, w, h, step, cols) {
 
     textAt(n0(temp) + '°', x, Y('temp'), 12, ink, true)
 
-    // Precip over the column's block: snow (cm) if any, else rain/total (mm).
-    const blockSum = (key) => {
-      const per = nums(
-        d.models.map((m) => {
-          const v = nums(m[key].slice(k, k + step))
-          return v.length ? v.reduce((a, b) => a + b, 0) : null
-        }),
-      )
-      return per.length ? per.reduce((a, b) => a + b, 0) / per.length : null
-    }
-    const sn = blockSum('snow')
-    const pr = blockSum('precip')
-    const isSnow = sn != null && sn >= 0.1
-    const amt = isSnow ? sn : pr
-    if (amt != null && amt >= 0.1) {
-      const strength = Math.min(1, 0.4 + amt / (isSnow ? 2 : 3))
-      ctx.setFillColor(new Color(isSnow ? '#7fb2ee' : '#2a78d6', strength))
-      ctx.fillRect(new Rect(x + 1, Y('precip'), cw - 2, 12 * scale))
-      textAt(amt < 10 ? n1(amt) : n0(amt), x, Y('precip') - 0.5, 9, new Color('#ffffff'), true)
+    // Amount above the wave: snow in cm when it's mostly snow, else mm.
+    const col = colsData[c]
+    const isSnow = col.snowWater >= col.precip * 0.5 && col.snow >= 0.1
+    const amt = isSnow ? col.snow : col.precip
+    if (amt >= 0.1) {
+      textAt(amt < 10 ? n1(amt) : n0(amt), x, Y('amount'), 9, new Color(isSnow ? '#f2f4f7' : '#7fb2ee'), true)
     }
 
     // Wind (top line of the panel) and gust cell (bottom line).
@@ -853,7 +857,7 @@ function errorWidget(spot, e) {
 
 // ---------- self-update ----------
 
-const VERSION = 6
+const VERSION = 7
 const PLACEHOLDER = 'https://YOUR-APP.vercel.app'
 
 /** Fetch the latest widget from the site and overwrite this script if newer. */
