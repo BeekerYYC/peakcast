@@ -1,4 +1,4 @@
-// PEAKCAST_WIDGET v5
+// PEAKCAST_WIDGET v6
 // iOS home-screen widget for Peakcast, run by the free Scriptable app.
 // Paste this whole file into Scriptable (copy it from <your site>/widget-install.html,
 // which fills in APP). It updates itself: each run checks APP/widget.js and, if
@@ -637,33 +637,46 @@ function dailyPanel(dd, w, h) {
   const span = Math.max(1, last - first)
   const X = (i) => ((i - first) / span) * w
 
-  // Temperature curve (filled) behind the columns.
-  const temps = []
-  for (let i = first; i <= last; i++) temps.push(avg('temp', i))
-  const tv = nums(temps)
-  const curveTop = h * 0.3
-  const curveBot = h * 0.66
-  if (tv.length > 1) {
-    const lo = Math.min(...tv)
-    const hi = Math.max(...tv)
-    const Yt = (v) => curveBot - ((v - lo) / Math.max(1, hi - lo)) * (curveBot - curveTop)
-    const area = new Path()
-    area.move(new Point(0, curveBot + 6))
-    let started = false
-    temps.forEach((v, j) => {
-      if (v == null) return
-      const pt = new Point(X(first + j), Yt(v))
-      area.addLine(pt)
-      started = true
-    })
-    if (started) {
-      area.addLine(new Point(w, curveBot + 6))
-      area.closeSubpath()
-      ctx.addPath(area)
-      ctx.setFillColor(new Color(isDark ? '#7fb2a0' : '#1baf7a', isDark ? 0.22 : 0.16))
-      ctx.fillPath()
-    }
+  // Precipitation waves along the bottom, placed at the hour it falls: white
+  // for snow, blue for rain (snow drawn underneath, rain stacked on top).
+  // Height grows with the amount (square-root scale so light precip shows).
+  const base = h - 2
+  const top = h * 0.5
+  const rainH = []
+  const snowH = []
+  for (let i = first; i <= last; i++) {
+    const pr = avg('precip', i) ?? 0
+    const snowWater = Math.min(pr, (avg('snow', i) ?? 0) / 0.7)
+    snowH.push(snowWater)
+    rainH.push(Math.max(0, pr - snowWater))
   }
+  // Light 3-hour smoothing so it reads as waves, not bars.
+  const smooth = (a) => a.map((_, j) => (a[Math.max(0, j - 1)] + 2 * a[j] + a[Math.min(a.length - 1, j + 1)]) / 4)
+  const sSnow = smooth(snowH)
+  const sTotal = smooth(rainH.map((r, j) => r + snowH[j]))
+  const peak = Math.max(1.5, ...sTotal)
+  const Yp = (mm) => base - Math.sqrt(Math.min(mm, peak) / peak) * (base - top)
+  const area = (vals, color) => {
+    if (!vals.some((v) => v > 0.02)) return
+    const p = new Path()
+    p.move(new Point(0, base))
+    vals.forEach((v, j) => p.addLine(new Point(X(first + j), v > 0.02 ? Yp(v) : base)))
+    p.addLine(new Point(w, base))
+    p.closeSubpath()
+    ctx.addPath(p)
+    ctx.setFillColor(color)
+    ctx.fillPath()
+  }
+  area(sTotal, new Color('#3987e5', 0.85)) // rain (total height)
+  area(sSnow, new Color('#f2f4f7', 0.95)) // snow portion, from the ground up
+  // Baseline.
+  const bl = new Path()
+  bl.move(new Point(0, base))
+  bl.addLine(new Point(w, base))
+  ctx.addPath(bl)
+  ctx.setStrokeColor(new Color('#898781', 0.35))
+  ctx.setLineWidth(1)
+  ctx.strokePath()
 
   const textAt = (str, x, y, width, size, color, bold) => {
     ctx.setFont(bold ? Font.semiboldSystemFont(size) : Font.systemFont(size))
@@ -677,7 +690,7 @@ function dailyPanel(dd, w, h) {
     if (c > 0) {
       const p = new Path()
       p.move(new Point(x, 0))
-      p.addLine(new Point(x, h * 0.72))
+      p.addLine(new Point(x, h))
       ctx.addPath(p)
       ctx.setStrokeColor(new Color('#898781', 0.35))
       ctx.setLineWidth(1)
@@ -697,26 +710,9 @@ function dailyPanel(dd, w, h) {
     ctx.drawImageInRect(sym.image, new Rect(x + (cw - isz) / 2, 15, isz, isz))
     const lo = t.length ? Math.min(...t) : null
     const hi = t.length ? Math.max(...t) : null
-    textAt(n0(lo) + '°/' + n0(hi) + '°', x, h * 0.58, cw, 13, ink, true)
+    textAt(n0(lo) + '°/' + n0(hi) + '°', x, 37, cw, 13, ink, true)
   })
 
-  // Precip strip: hourly intensity, rain blue / snow pale blue.
-  const sy = h * 0.82
-  const sh = h * 0.12
-  const bg = new Path()
-  bg.addRoundedRect(new Rect(0, sy, w, sh), sh / 2, sh / 2)
-  ctx.addPath(bg)
-  ctx.setFillColor(new Color(isDark ? '#ffffff' : '#0b0b0b', 0.1))
-  ctx.fillPath()
-  const hw = w / (span + 1)
-  for (let i = first; i <= last; i++) {
-    const pr = avg('precip', i)
-    if (pr == null || pr < 0.05) continue
-    const sn = avg('snow', i)
-    const isSnow = sn != null && sn >= 0.05
-    ctx.setFillColor(new Color(isSnow ? '#a9cdf5' : '#3987e5', Math.min(1, 0.35 + pr / 1.5)))
-    ctx.fillRect(new Rect(X(i), sy, Math.max(1, hw), sh))
-  }
   return ctx.getImage()
 }
 
@@ -857,7 +853,7 @@ function errorWidget(spot, e) {
 
 // ---------- self-update ----------
 
-const VERSION = 5
+const VERSION = 6
 const PLACEHOLDER = 'https://YOUR-APP.vercel.app'
 
 /** Fetch the latest widget from the site and overwrite this script if newer. */
