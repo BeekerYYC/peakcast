@@ -163,3 +163,72 @@ export function modeSeries(members: Series[]): Series {
   }
   return out
 }
+
+/**
+ * "Feels like" temperature (°C) in Environment Canada's terms: wind chill when
+ * it is cool and breezy (T ≤ 10 °C, wind ≥ 5 km/h), humidex when it is warm
+ * and humid (T ≥ 20 °C), otherwise the air temperature.
+ */
+export function feelsLike(t: Num, windKmh: Num, rh: Num): Num {
+  if (t == null) return null
+  if (t <= 10 && windKmh != null && windKmh >= 5) {
+    const v = windKmh ** 0.16
+    const wc = 13.12 + 0.6215 * t - 11.37 * v + 0.3965 * t * v
+    return round(Math.min(t, wc), 1)
+  }
+  if (t >= 20 && rh != null && rh > 0) {
+    // Vapour pressure (hPa) from temperature and relative humidity.
+    const e = 6.112 * 10 ** ((7.5 * t) / (237.7 + t)) * (rh / 100)
+    const hx = t + 0.5555 * (e - 10)
+    return round(Math.max(t, hx), 1)
+  }
+  return t
+}
+
+export function feelsLikeSeries(t: Series | undefined, wind: Series | undefined, rh: Series | undefined): Series {
+  if (!t) return []
+  return t.map((v, i) => feelsLike(v, wind?.[i] ?? null, rh?.[i] ?? null))
+}
+
+/**
+ * Ensemble chance of precipitation: per hour, the share of members (0–100)
+ * with at least `mm` of precipitation over the `hours` hours ending then,
+ * and the share with at least `cm` of snowfall over the same window.
+ */
+export function wetChance(
+  precip: Series[],
+  snowfall: Series[],
+  hours = 6,
+  mm = 0.5,
+  cm = 0.5,
+): { wet: Series; snow: Series } {
+  const n = precip[0]?.length ?? 0
+  const wet: Series = new Array(n).fill(null)
+  const snow: Series = new Array(n).fill(null)
+  const trailing = (s: Series, i: number): number | null => {
+    let sum = 0
+    for (let j = i - hours + 1; j <= i; j++) {
+      const v = s[j]
+      if (j < 0 || v == null) return null
+      sum += v
+    }
+    return sum
+  }
+  for (let i = hours - 1; i < n; i++) {
+    let total = 0
+    let w = 0
+    let sn = 0
+    precip.forEach((p, k) => {
+      const sum = trailing(p, i)
+      if (sum == null) return
+      total++
+      if (sum >= mm) w++
+      const s = snowfall[k] ? trailing(snowfall[k], i) : null
+      if (s != null && s >= cm) sn++
+    })
+    if (!total) continue
+    wet[i] = Math.round((100 * w) / total)
+    snow[i] = Math.round((100 * sn) / total)
+  }
+  return { wet, snow }
+}

@@ -5,13 +5,13 @@ import { consensus, runningTotal } from '../../data/consensus'
 import { indexOf, type Timeline } from '../../data/timeline'
 import type { ModelSeries, Series } from '../../data/types'
 import { num } from '../../lib/format'
-import { alpha, CHROME, type Resolved } from '../../lib/theme'
+import { alpha, CHROME, RAIN, SNOW, type Resolved } from '../../lib/theme'
+import { usePrefs } from '../../state/prefs'
 import { useScrub } from '../../state/scrub'
 import { bucketSum } from './buildData'
+import { CardHeader } from './ChartCard'
 import { bindScrub, cursorOpts, drawBackdrop, drawNow, xAxis, Y_AXIS, yAxis } from './uplotShared'
 
-const RAIN = { light: '#2a78d6', dark: '#3987e5' }
-const SNOW = { light: '#8f8d86', dark: '#d6d4cc' }
 
 interface Data {
   /** Hourly (or bucketed) total precip, mm. */
@@ -73,7 +73,7 @@ function Readout({ tl, d, aggHours }: { tl: Timeline; d: Data; aggHours: number 
       ) : (
         <>
           <span>
-            <span className="text-muted">Total </span>
+            <span className="text-muted">{tl.now < tl.from ? 'Day total ' : 'Total '}</span>
             {num(d.rainSum, 1)} mm rain
           </span>
           <span>{num(d.snowSum, 1)} cm snow</span>
@@ -144,12 +144,16 @@ export const PrecipCloudCard = memo(function PrecipCloudCard({
   tl,
   theme,
   aggHours,
+  heights,
 }: {
   models: ModelSeries[]
   tl: Timeline
   theme: Resolved
   aggHours: number
+  /** Landscape view: [precip, cloud] plot heights, no collapsing. */
+  heights?: [number, number]
 }) {
+  const collapsed = usePrefs((s) => !heights && !!s.chartCollapsed.precipcloud)
   const d = useMemo(() => build(models, tl, aggHours), [models, tl, aggHours])
   const C = CHROME[theme]
   const rain = RAIN[theme]
@@ -195,29 +199,41 @@ export const PrecipCloudCard = memo(function PrecipCloudCard({
       className="rounded-2xl bg-surface shadow-[0_0_0_1px_var(--hair)]"
       style={{ ['--rain' as string]: rain, ['--snow' as string]: snow }}
     >
-      <header className="px-3.5 pt-2.5 pb-0.5">
-        <h3 className="text-[13px] leading-5 font-semibold text-ink">Precipitation &amp; clouds</h3>
+      <CardHeader id="precipcloud" title="Precipitation & clouds" fixed={!!heights} />
+      <div className={`px-3.5 ${collapsed ? 'pb-2.5' : 'pb-0.5'}`}>
         <p className="truncate text-[11px] leading-4 text-muted">
           mean of {ids.join(', ')} · rain mm, snow cm
         </p>
         <Readout tl={tl} d={d} aggHours={aggHours} />
-      </header>
-      <div className="pr-1">
-        <Plot tl={tl} theme={theme} height={110} showX={false} data={top.data} series={top.series} range={top.range} />
       </div>
-      <div className="flex items-center gap-1 px-3.5 pt-1 text-[11px] text-muted">Cloud cover %</div>
-      <div className="pr-1 pb-1">
-        <Plot
-          tl={tl}
-          theme={theme}
-          height={64}
-          showX
-          data={bottom.data}
-          series={bottom.series}
-          range={bottom.range}
-          yFmt={pctFmt}
-        />
-      </div>
+      {!collapsed && (
+        <>
+          <div className="pr-1">
+            <Plot
+              tl={tl}
+              theme={theme}
+              height={heights?.[0] ?? 110}
+              showX={false}
+              data={top.data}
+              series={top.series}
+              range={top.range}
+            />
+          </div>
+          <div className="flex items-center gap-1 px-3.5 pt-1 text-[11px] text-muted">Cloud cover %</div>
+          <div className="pr-1 pb-1">
+            <Plot
+              tl={tl}
+              theme={theme}
+              height={heights?.[1] ?? 64}
+              showX
+              data={bottom.data}
+              series={bottom.series}
+              range={bottom.range}
+              yFmt={pctFmt}
+            />
+          </div>
+        </>
+      )}
     </section>
   )
 })

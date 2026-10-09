@@ -178,6 +178,32 @@ disagreement, and `describeWeekend()` adds Sat/Sun with a "better day" pick from
 Wednesday to Saturday. Shown by `DayOutlook` under the Now card; it follows the
 day picked in the day cards. Unit tested in `tests/narrative.test.ts`.
 
+### Chart tools (M7)
+- **Day zoom**: tapping a day card zooms every chart to that local day
+  (`sliceTimeline` + `dayWindow` in `data/timeline.ts`); a bar under the
+  scrubber steps ‹ › through days or shows all. Zoomed charts use hourly
+  precip (no 6 h buckets). Zoom is per horizon tab and not persisted.
+- **Spread mode** (`prefs.chartMode`): per chart with `spread`, a min–max band
+  across models plus a bold mean line; model lines are faded. Needs ≥2 models.
+- **Daily labels**: `peaks` on a chart def draws each day's high/low (temp) or
+  max gust (wind, falls back to wind speed), using the mean of each model's
+  daily extreme so they match the day cards. Labels that would overlap are
+  skipped; none below ~26 px per day (16d).
+- **Feels like**: `feelsLike()` in `derive.ts` (Environment Canada wind chill
+  for T ≤ 10 °C and wind ≥ 5 km/h, humidex for T ≥ 20 °C). Dashed consensus
+  line on the temperature chart only where it differs by ≥1 °C; also on the
+  day cards (when ≥2° beyond hi/lo) and the Now card.
+- **Zones**: wind chart tints gusts above 50 km/h.
+- **Ensemble wet strip**: `normalizeEnsemble` adds `wet_chance`/`snow_chance`
+  (% of GEPS members with ≥0.5 mm / ≥0.5 cm in the 6 h ending each hour); the
+  precip chart shows it per local 6 h block when GEPS is visible.
+- **Card order**: `CARDS`/`orderedCards()` in `chartDefs.ts`; order, hidden and
+  collapsed state live in prefs. "Customize charts" sheet (`ChartsSheet`)
+  reorders/hides; tapping a card title folds it.
+- **Landscape**: `useLandscape()` (landscape and ≤520 px tall) swaps the page
+  for `LandscapeView`: one chart full screen, chips to switch, day zoom,
+  Spread and horizon tabs. Manifest orientation is `any`.
+
 ### Charting library: uPlot
 Chosen for dense multi-series time series on phones. ~50 KB and canvas
 rendered, so 8 models × 384 hours × 5 charts stays at 60 fps where SVG libs
@@ -221,7 +247,7 @@ with the site address pre-filled. Preview locally with `npm run widget:preview`.
 - Keep requests polite: no polling, refresh on focus only if data > 15 min old.
 - Before each commit: `npm run check` (typecheck, lint, tests, build).
 - Visual check: `npm run dev`, then `npm run shot -- <url> <out.png> [--dark]
-  [--viewport]` renders an iPhone 15 viewport via Playwright (API calls are
+  [--viewport] [--landscape]` renders an iPhone 15 viewport via Playwright (API calls are
   proxied through Node). `SHOT_ACTIONS` env can script clicks before capture.
 - Refresh API fixtures: `npm run fixtures`. App icons: `npx tsx scripts/icons.ts`.
 - One commit (or a few) at the end of each milestone; message prefixed `M<n>:`.
@@ -244,3 +270,5 @@ with the site address pre-filled. Preview locally with `npm run widget:preview`.
    safe areas, per-spot home-screen manifests, Vercel deploy.
 6. **Visual design pass**: ✅ typography, motion, dark mode tuning, empty/error
    states, haptics-feel micro-interactions.
+7. **Chart tools**: ✅ day zoom, spread mode, daily hi/lo + gust labels,
+   feels-like, gust zone, GEPS wet strip, reorder/hide/fold cards, landscape.

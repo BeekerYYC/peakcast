@@ -11,9 +11,13 @@ import { WxGlyph } from './Icons'
 interface Props {
   models: ModelSeries[]
   tl: Timeline
+  /** Day the charts are zoomed to (local date key), if any. */
+  zoomKey?: string | null
+  /** Tapping a card: zoom the charts to that day (again to zoom out). */
+  onPick?: (key: string) => void
 }
 
-export function DailySummary({ models, tl }: Props) {
+export function DailySummary({ models, tl, zoomKey, onPick }: Props) {
   const scrubT = useScrub((s) => s.t)
   const setScrub = useScrub((s) => s.set)
   const days = useMemo(() => dailySummary(models, tl.tz, tl.now - 3600, tl.to), [models, tl])
@@ -42,7 +46,14 @@ export function DailySummary({ models, tl }: Props) {
       {days.map((d) => {
         const code = codes.get(d.key)
         const w = wmo(code)
-        const active = activeKey === d.key
+        const zoomed = zoomKey === d.key
+        const active = zoomed || (!zoomKey && activeKey === d.key)
+        const feels =
+          d.feelsLo.value != null && d.lo.value != null && d.feelsLo.value <= d.lo.value - 2
+            ? d.feelsLo.value
+            : d.feelsHi.value != null && d.hi.value != null && d.feelsHi.value >= d.hi.value + 2
+              ? d.feelsHi.value
+              : null
         const spread = (c: { min: number | null; max: number | null }, digits = 0) =>
           c.min != null && c.max != null && c.max - c.min >= (digits ? 0.5 : 2)
             ? `${num(c.min, digits)}–${num(c.max, digits)}`
@@ -57,11 +68,13 @@ export function DailySummary({ models, tl }: Props) {
                 (t, i) => localDayKey(t, tl.tz) === d.key && tl.hours[i] === 13,
               )
               setScrub(noon ?? d.start)
+              onPick?.(d.key)
             }}
+            aria-pressed={zoomed}
             className={`flex min-w-[84px] flex-1 shrink-0 snap-start flex-col items-center rounded-2xl px-2 pt-2 pb-2.5 text-center transition-colors ${
               active ? 'bg-accent/12 shadow-[0_0_0_1.5px_var(--accent)]' : 'bg-surface shadow-[0_0_0_1px_var(--hair)]'
             }`}
-            aria-label={`${d.label}: high ${num(d.hi.value)}, low ${num(d.lo.value)}, ${w.label}`}
+            aria-label={`${d.label}: high ${num(d.hi.value)}, low ${num(d.lo.value)}${feels != null ? `, feels like ${num(feels)}` : ''}, ${w.label}. ${zoomed ? 'Show all days' : 'Zoom charts to this day'}`}
           >
             <span className="text-[12px] font-semibold text-ink">
               {d.label} <span className="font-normal text-muted">{dayOfMonth(d.start, tl.tz)}</span>
@@ -72,6 +85,11 @@ export function DailySummary({ models, tl }: Props) {
             <span className="tnum text-[15px] leading-5 font-semibold text-ink">
               {num(d.hi.value)}°<span className="font-normal text-muted"> {num(d.lo.value)}°</span>
             </span>
+            {feels != null && (
+              <span className="tnum text-[11px] leading-4 text-ink-2">
+                <span className="text-muted">feels</span> {num(feels)}°
+              </span>
+            )}
             {hiSpread && <span className="tnum text-[10px] leading-3 text-muted">hi {hiSpread}</span>}
             <span className="tnum mt-1 text-[11px] leading-4 text-ink-2">
               {d.snow.value != null && d.snow.value >= 0.5

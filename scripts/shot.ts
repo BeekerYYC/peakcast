@@ -1,6 +1,6 @@
 /**
  * Screenshot the app at an iPhone viewport. API calls are proxied through
- * Node's fetch (live data). Usage: tsx scripts/shot.ts [url] [out] [--dark]
+ * Node's fetch (live data). Usage: tsx scripts/shot.ts [url] [out] [--dark] [--viewport] [--landscape]
  */
 import { existsSync, readdirSync } from 'node:fs'
 import { chromium, devices } from 'playwright'
@@ -9,6 +9,7 @@ const url = process.argv[2] ?? 'http://localhost:5173/'
 const out = process.argv[3] ?? 'shot.png'
 const dark = process.argv.includes('--dark')
 const full = !process.argv.includes('--viewport')
+const landscape = process.argv.includes('--landscape')
 
 function chromiumPath(): string | undefined {
   const base = '/opt/pw-browsers'
@@ -22,7 +23,7 @@ function chromiumPath(): string | undefined {
 }
 
 const browser = await chromium.launch({ executablePath: chromiumPath() })
-const ctx = await browser.newContext({ ...devices['iPhone 15'], colorScheme: dark ? 'dark' : 'light' })
+const ctx = await browser.newContext({ ...devices[landscape ? 'iPhone 15 landscape' : 'iPhone 15'], colorScheme: dark ? 'dark' : 'light' })
 const page = await ctx.newPage()
 page.on('console', (m) => console.log('[console]', m.type(), m.text()))
 page.on('pageerror', (e) => console.log('[pageerror]', e.message))

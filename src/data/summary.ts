@@ -1,3 +1,4 @@
+import { feelsLikeSeries } from './derive'
 import type { ModelSeries, Series } from './types'
 
 export interface DayModelStats {
@@ -6,6 +7,9 @@ export interface DayModelStats {
   precip: number | null
   snow: number | null
   gust: number | null
+  /** Coldest wind chill / warmest humidex of the day. */
+  feelsLo: number | null
+  feelsHi: number | null
   /** Hours of data in this day (partial days at window edges). */
   hours: number
 }
@@ -27,6 +31,8 @@ export interface DaySummary {
   precip: Consensus
   snow: Consensus
   gust: Consensus
+  feelsLo: Consensus
+  feelsHi: Consensus
   perModel: Record<string, DayModelStats>
 }
 
@@ -86,6 +92,7 @@ export function dailySummary(
 
   for (const m of models) {
     if (!m.covered) continue
+    const feels = feelsLikeSeries(m.vars.temperature_2m, m.vars.wind_speed_10m, m.vars.relative_humidity_2m)
     const byDay = new Map<string, number[]>()
     m.time.forEach((t, i) => {
       if (t < from || t > to) return
@@ -108,6 +115,8 @@ export function dailySummary(
           precip: empty(),
           snow: empty(),
           gust: empty(),
+          feelsLo: empty(),
+          feelsHi: empty(),
           perModel: {},
         }
         days.set(k, d)
@@ -117,12 +126,15 @@ export function dailySummary(
       const p = slice(m.vars.precipitation, idx)
       const s = slice(m.vars.snowfall, idx)
       const g = slice(m.vars.wind_gusts_10m, idx)
+      const f = slice(feels, idx)
       d.perModel[m.modelId] = {
         hi: t.length ? Math.max(...t) : null,
         lo: t.length ? Math.min(...t) : null,
         precip: p.length ? p.reduce((a, b) => a + b, 0) : null,
         snow: s.length ? s.reduce((a, b) => a + b, 0) : null,
         gust: g.length ? Math.max(...g) : null,
+        feelsLo: f.length ? Math.min(...f) : null,
+        feelsHi: f.length ? Math.max(...f) : null,
         hours: idx.length,
       }
     }
@@ -136,6 +148,8 @@ export function dailySummary(
     d.precip = consensus(pm.map((x) => x.precip), 1)
     d.snow = consensus(pm.map((x) => x.snow), 1)
     d.gust = consensus(pm.map((x) => x.gust), 0)
+    d.feelsLo = consensus(pm.map((x) => x.feelsLo), 0)
+    d.feelsHi = consensus(pm.map((x) => x.feelsHi), 0)
   }
   return out
 }

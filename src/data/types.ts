@@ -3,8 +3,12 @@ import type { VarKey } from '../config/models'
 export type Num = number | null
 export type Series = Num[]
 
-/** Normalized variables per model. `liquid` = rain + showers (or derived). */
-export type SeriesKey = VarKey | 'liquid'
+/**
+ * Normalized variables per model. `liquid` = rain + showers (or derived).
+ * Ensembles also carry `wet_chance` / `snow_chance`: % of members with
+ * precipitation (snow) in the 6 h ending at each hour.
+ */
+export type SeriesKey = VarKey | 'liquid' | 'wet_chance' | 'snow_chance'
 
 export interface Band {
   lo: Series

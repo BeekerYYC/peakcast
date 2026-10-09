@@ -1,5 +1,5 @@
 import type { SeriesKey } from '../../data/types'
-import type { PrecipMode } from '../../state/prefs'
+import type { ChartMode, PrecipMode } from '../../state/prefs'
 
 export interface LineSpec {
   key: SeriesKey
@@ -18,6 +18,22 @@ export interface ChartCtx {
   elevation: number
   /** Bucket size for hourly precip bars on long horizons (1 = none). */
   aggHours: number
+  mode: ChartMode
+}
+
+/** Tinted value range, e.g. strong gusts. */
+export interface Zone {
+  from: number
+  label: string
+}
+
+/** Daily extreme labels drawn on the chart (same numbers as the day cards). */
+export interface PeakSpec {
+  key: SeriesKey
+  /** Used when no visible model has `key` (e.g. gusts → wind speed). */
+  fallback?: SeriesKey
+  lo: boolean
+  fmt: (v: number, fromFallback: boolean) => string
 }
 
 export interface RefLine {
@@ -44,6 +60,14 @@ export interface ChartDef {
   aggregates?: boolean
   /** Allow ensemble spread bands (only meaningful for hourly values). */
   bands?: (c: ChartCtx) => boolean
+  /** Spread mode applies (range band + mean of the main line). */
+  spread?: (c: ChartCtx) => boolean
+  peaks?: PeakSpec
+  /** Dashed "feels like" line (wind chill / humidex). */
+  feels?: boolean
+  zones?: Zone[]
+  /** Ensemble chance-of-precip strip along the top. */
+  wetStrip?: boolean
 }
 
 const pad = (min: number, max: number, p: number, minSpan: number): [number, number] => {
@@ -70,6 +94,9 @@ export const CHARTS: ChartDef[] = [
     range: (min, max) => pad(min, max, 1, 6),
     refLines: () => [{ value: 0, kind: 'zero' }],
     bands: () => true,
+    spread: () => true,
+    peaks: { key: 'temperature_2m', lo: true, fmt: (v) => `${Math.round(v)}°` },
+    feels: true,
   },
   {
     id: 'precip',
@@ -78,6 +105,8 @@ export const CHARTS: ChartDef[] = [
     height: 120,
     digits: 1,
     lines: precipLines('precipitation'),
+    spread: (c) => c.precipMode === 'total',
+    wetStrip: true,
     range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : 2 * Math.sqrt(c.aggHours), Math.ceil(max * 1.15))],
     collapseWhenEmpty: 'No precipitation forecast',
     aggregates: true,
@@ -90,6 +119,7 @@ export const CHARTS: ChartDef[] = [
     height: 110,
     digits: 1,
     lines: precipLines('snowfall'),
+    spread: (c) => c.precipMode === 'total',
     range: (_min, max, c) => [0, Math.max(c.precipMode === 'total' ? 5 : Math.sqrt(c.aggHours), Math.ceil(max * 1.15))],
     collapseWhenEmpty: 'No snow forecast',
     aggregates: true,
@@ -108,6 +138,14 @@ export const CHARTS: ChartDef[] = [
     range: (_min, max) => [0, Math.max(20, Math.ceil((max * 1.1) / 10) * 10)],
     windArrows: true,
     bands: () => true,
+    spread: () => true,
+    peaks: {
+      key: 'wind_gusts_10m',
+      fallback: 'wind_speed_10m',
+      lo: false,
+      fmt: (v, fb) => (fb ? `${Math.round(v)}` : `g${Math.round(v)}`),
+    },
+    zones: [{ from: 50, label: 'gusty 50+' }],
   },
   {
     id: 'fzl',
@@ -122,6 +160,7 @@ export const CHARTS: ChartDef[] = [
       return [Math.max(0, Math.floor(lo / 250) * 250), Math.ceil(hi / 250) * 250]
     },
     refLines: (c) => [{ value: c.elevation, label: `${Math.round(c.elevation)} m`, kind: 'ground' }],
+    spread: () => true,
     noDataHint: 'Not provided by these models. Tap Compare to overlay HRRR, HRDPS, RDPS, GDPS, IFS or AIFS.',
   },
   {
@@ -133,6 +172,7 @@ export const CHARTS: ChartDef[] = [
     lines: () => [{ key: 'cloud_cover', role: 'main', width: 1.75 }],
     range: () => [0, 100],
     bands: () => true,
+    spread: () => true,
   },
   {
     id: 'rh',
@@ -143,6 +183,7 @@ export const CHARTS: ChartDef[] = [
     lines: () => [{ key: 'relative_humidity_2m', role: 'main', width: 1.75 }],
     range: () => [0, 100],
     bands: () => true,
+    spread: () => true,
   },
   {
     id: 'pressure',
@@ -153,6 +194,7 @@ export const CHARTS: ChartDef[] = [
     lines: () => [{ key: 'pressure_msl', role: 'main', width: 1.75 }],
     range: (min, max) => pad(min, max, 1, 10),
     bands: () => true,
+    spread: () => true,
   },
 ]
 
@@ -160,4 +202,25 @@ export const CHARTS: ChartDef[] = [
 export function unitFor(def: ChartDef, c: ChartCtx): string {
   if (def.aggregates && c.precipMode === 'hourly' && c.aggHours > 1) return `${def.unit}/${c.aggHours}h`
   return def.unit
+}
+
+/** Every chart card, in default order ('precipcloud' is the combined card). */
+export const CARDS: { id: string; title: string }[] = [
+  { id: 'temp', title: 'Temperature' },
+  { id: 'precipcloud', title: 'Precipitation & clouds' },
+  ...CHARTS.filter((c) => c.id !== 'temp').map((c) => ({ id: c.id, title: c.title })),
+]
+
+/** Saved order merged with the full list (new cards appear at their default spot). */
+export function orderedCards(saved: string[]): string[] {
+  const all = CARDS.map((c) => c.id)
+  const known = saved.filter((id) => all.includes(id))
+  for (const [i, id] of all.entries()) {
+    if (known.includes(id)) continue
+    // Insert after its default predecessor when possible.
+    const prev = all[i - 1]
+    const at = prev ? known.indexOf(prev) + 1 : 0
+    known.splice(at, 0, id)
+  }
+  return known
 }

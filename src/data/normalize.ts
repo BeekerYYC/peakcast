@@ -7,6 +7,7 @@ import {
   ensembleStats,
   freezingLevelSeries,
   sumSeries,
+  wetChance,
 } from './derive'
 import { ENSEMBLE_VARS } from './openmeteo'
 import type { ModelSeries, Series, SeriesKey } from './types'
@@ -129,6 +130,13 @@ export function normalizeEnsemble(raw: RawResponse, modelId: string): ModelSerie
     const st = ensembleStats(liquid, 2)
     vars.liquid = st.mean
     bands.liquid = st.band
+  }
+
+  const precipMembers = membersOf('precipitation')
+  if (precipMembers.length) {
+    const ch = wetChance(precipMembers, membersOf('snowfall'))
+    vars.wet_chance = ch.wet
+    vars.snow_chance = ch.snow
   }
 
   for (const v of ENSEMBLE_VARS) {

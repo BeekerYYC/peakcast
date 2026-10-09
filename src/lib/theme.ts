@@ -15,6 +15,7 @@ export const CHROME = {
     axis: '#c3c2b7',
     night: 'rgba(30, 40, 80, 0.045)',
     zero: '#2a78d6',
+    warn: '#d97706',
   },
   dark: {
     surface: '#1a1a19',
@@ -25,10 +26,15 @@ export const CHROME = {
     axis: '#383835',
     night: 'rgba(0, 0, 0, 0.28)',
     zero: '#3987e5',
+    warn: '#f59e0b',
   },
 } as const
 
 export type Chrome = (typeof CHROME)[Resolved]
+
+/** Rain and snow colours shared by the precip charts. */
+export const RAIN = { light: '#2a78d6', dark: '#3987e5' } as const
+export const SNOW = { light: '#8f8d86', dark: '#d6d4cc' } as const
 
 function systemDark(): boolean {
   return typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches

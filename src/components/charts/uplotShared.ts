@@ -105,6 +105,7 @@ export function drawBackdrop(u: uPlot, tl: Timeline, C: Chrome): void {
 
 /** "Now" marker line. */
 export function drawNow(u: uPlot, tl: Timeline, C: Chrome): void {
+  if (tl.now < tl.from || tl.now > tl.to) return
   const c = u.ctx
   const { top, height } = u.bbox
   const nx = Math.round(u.valToPos(tl.now, 'x', true)) + 0.5
@@ -150,7 +151,8 @@ export function bindScrub(u: uPlot, tl: Timeline, el: HTMLElement): () => void {
     if (t == null) u.setCursor({ left: -10, top: -10 }, false)
     else u.setCursor({ left: u.valToPos(t, 'x'), top: 4 }, false)
   }
-  position(useScrub.getState().t)
+  // uPlot lays out in a microtask; position once the scales are ready.
+  const raf = requestAnimationFrame(() => position(useScrub.getState().t))
   const unsub = useScrub.subscribe((s) => position(s.t))
   const ro = new ResizeObserver(() => {
     if (el.clientWidth && el.clientWidth !== u.width) {
@@ -160,6 +162,7 @@ export function bindScrub(u: uPlot, tl: Timeline, el: HTMLElement): () => void {
   })
   ro.observe(el)
   return () => {
+    cancelAnimationFrame(raf)
     unsub()
     ro.disconnect()
   }

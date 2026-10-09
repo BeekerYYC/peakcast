@@ -1,20 +1,26 @@
 import { motion } from 'motion/react'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { HORIZONS_BY_ID, PAST_HOURS } from '../config/horizons'
 import type { Spot } from '../config/spots'
-import { buildTimeline } from '../data/timeline'
+import { localDayKey } from '../data/summary'
+import { buildTimeline, dayWindow, sliceTimeline, type Timeline } from '../data/timeline'
 import type { CachedModel, ModelSeries } from '../data/types'
+import { useLandscape } from '../hooks/useLandscape'
+import { dayOfMonth, weekday } from '../lib/format'
 import { useResolvedTheme } from '../lib/theme'
 import { usePrefs, visibleModelsFor } from '../state/prefs'
+import { useScrub } from '../state/scrub'
 import { buildChartData } from './charts/buildData'
 import { ChartCard } from './charts/ChartCard'
 import { PrecipCloudCard } from './charts/PrecipCloudCard'
-import { CHARTS, type ChartCtx } from './charts/chartDefs'
+import { CHARTS, orderedCards, type ChartCtx } from './charts/chartDefs'
+import { ChartsSheet } from './ChartsSheet'
+import { LandscapeView } from './LandscapeView'
 import { DailySummary } from './DailySummary'
 import { DayOutlook } from './DayOutlook'
 import { ModelChips } from './ModelChips'
 import { NowHero } from './NowHero'
-import { ScrubBar } from './ScrubBar'
+import { ScrubBar, type ZoomControls } from './ScrubBar'
 
 interface Props {
   spot: Spot
@@ -32,6 +38,29 @@ function useHourTick(): number {
     return () => clearInterval(id)
   }, [])
   return h
+}
+
+interface Day {
+  key: string
+  from: number
+  to: number
+}
+
+/** Local days in the window with at least 6 hours, for zooming. */
+function daysOf(tl: Timeline): Day[] {
+  const starts = [tl.from, ...tl.midnights.filter((t) => t > tl.from)]
+  return starts
+    .map((t) => {
+      const [from, to] = dayWindow(tl, t)
+      return { key: localDayKey(t, tl.tz), from, to }
+    })
+    .filter((d) => d.to - d.from >= 6 * 3600)
+}
+
+/** Noon (or the first hour) of a day, so the scrubber lands on it. */
+function noonOf(tl: Timeline, d: Day): number {
+  const i = tl.times.findIndex((t, k) => t >= d.from && t <= d.to && tl.hours[k] === 13)
+  return i >= 0 ? tl.times[i] : d.from
 }
 
 export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
@@ -56,21 +85,67 @@ export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
   const tz = models[0]?.timezone ?? Object.values(data)[0]?.series.timezone ?? 'America/Edmonton'
   const elevation = models[0]?.elevation ?? spot.elevation ?? 0
 
+  const chartMode = usePrefs((s) => s.chartMode)
+  const chartOrder = usePrefs((s) => s.chartOrder)
+  const chartHidden = usePrefs((s) => s.chartHidden)
+  const { landscape, height: viewH } = useLandscape()
+  const [sheet, setSheet] = useState(false)
+
   const tl = useMemo(
     () => buildTimeline(tz, spot.lat, spot.lon, horizon.hours, PAST_HOURS, hour * 3_600_000 + 1),
     [tz, spot.lat, spot.lon, horizon.hours, hour],
   )
-  const aggHours = horizon.hours > 96 ? 6 : 1
+
+  // Day zoom: remembered per horizon tab, dropped if the day leaves the window.
+  const [zoom, setZoom] = useState<{ h: string; key: string } | null>(null)
+  const days = useMemo(() => daysOf(tl), [tl])
+  const zi = zoom && zoom.h === horizonId ? days.findIndex((d) => d.key === zoom.key) : -1
+  const zoomDay = zi >= 0 ? days[zi] : null
+  const ztl = useMemo(() => (zoomDay ? sliceTimeline(tl, zoomDay.from, zoomDay.to) : tl), [tl, zoomDay])
+  const goDay = (d: Day | undefined) => {
+    if (!d) return setZoom(null)
+    setZoom({ h: horizonId, key: d.key })
+    useScrub.getState().set(noonOf(tl, d))
+  }
+  const zoomControls: ZoomControls | null = zoomDay
+    ? {
+        label: `${weekday(zoomDay.from + 3600, tl.tz)} ${dayOfMonth(zoomDay.from + 3600, tl.tz)}`,
+        prev: zi > 0 ? () => goDay(days[zi - 1]) : undefined,
+        next: zi < days.length - 1 ? () => goDay(days[zi + 1]) : undefined,
+        clear: () => setZoom(null),
+      }
+    : null
+
+  const aggHours = horizon.hours > 96 && !zoomDay ? 6 : 1
   const ctx: ChartCtx = useMemo(
-    () => ({ precipMode, elevation, aggHours }),
-    [precipMode, elevation, aggHours],
+    () => ({ precipMode, elevation, aggHours, mode: chartMode }),
+    [precipMode, elevation, aggHours, chartMode],
   )
   const charts = useMemo(
-    () => CHARTS.map((def) => ({ def, cd: buildChartData(def, ctx, tl, models) })),
-    [ctx, tl, models],
+    () => CHARTS.map((def) => ({ def, cd: buildChartData(def, ctx, ztl, models) })),
+    [ctx, ztl, models],
   )
+  const cards = useMemo(() => orderedCards(chartOrder).filter((id) => !chartHidden[id]), [chartOrder, chartHidden])
 
   const hasData = models.length > 0
+  if (landscape && hasData)
+    return (
+      <LandscapeView
+        spotName={spot.name}
+        tl={ztl}
+        ctx={ctx}
+        theme={theme}
+        models={models}
+        charts={charts}
+        cards={cards}
+        height={viewH}
+        zoom={zoomControls}
+        onZoom={() => {
+          const t = useScrub.getState().t ?? tl.now
+          goDay(days.find((d) => t >= d.from && t < d.to) ?? days[0])
+        }}
+      />
+    )
   return (
     <div className="flex flex-col gap-3">
       <ModelChips horizon={horizonId} data={data} />
@@ -84,18 +159,35 @@ export function ForecastView({ spot, data, loading, error, onRetry }: Props) {
         >
           <NowHero models={models} tl={tl} />
           <DayOutlook models={allModels} tl={tl} elevation={elevation} />
-          <DailySummary models={models} tl={tl} />
-          <ScrubBar tl={tl} precipMode={precipMode} aggHours={aggHours} onPrecipMode={setPrecipMode} />
+          <DailySummary
+            models={models}
+            tl={tl}
+            zoomKey={zoomDay?.key ?? null}
+            onPick={(key) => (zoomDay?.key === key ? setZoom(null) : setZoom({ h: horizonId, key }))}
+          />
+          <ScrubBar
+            tl={tl}
+            precipMode={precipMode}
+            aggHours={aggHours}
+            onPrecipMode={setPrecipMode}
+            zoom={zoomControls}
+          />
           <div className="flex flex-col gap-2.5">
-            {charts.map(({ def, cd }) => (
-              <Fragment key={def.id}>
-                <ChartCard def={def} ctx={ctx} tl={tl} cd={cd} theme={theme} showX />
-                {def.id === 'temp' && (
-                  <PrecipCloudCard models={models} tl={tl} theme={theme} aggHours={aggHours} />
-                )}
-              </Fragment>
-            ))}
+            {cards.map((id) => {
+              if (id === 'precipcloud')
+                return <PrecipCloudCard key={id} models={models} tl={ztl} theme={theme} aggHours={aggHours} />
+              const c = charts.find((x) => x.def.id === id)
+              return c && <ChartCard key={id} def={c.def} ctx={ctx} tl={ztl} cd={c.cd} theme={theme} showX />
+            })}
+            <button
+              type="button"
+              onClick={() => setSheet(true)}
+              className="mt-1 self-center rounded-full px-4 py-1.5 text-[13px] font-medium text-ink-2 shadow-[0_0_0_1px_var(--hair)] active:scale-[0.97]"
+            >
+              Customize charts
+            </button>
           </div>
+          <ChartsSheet open={sheet} onClose={() => setSheet(false)} />
         </motion.div>
       ) : (
         <EmptyState

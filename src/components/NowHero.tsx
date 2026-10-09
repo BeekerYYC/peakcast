@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { feelsConsensus } from '../data/consensus'
 import { alignVar, indexOf, type Timeline } from '../data/timeline'
 import type { ModelSeries, SeriesKey } from '../data/types'
 import { num } from '../lib/format'
@@ -37,6 +38,7 @@ export function NowHero({ models, tl }: Props) {
       tMin: temps.length > 1 ? Math.min(...temps) : null,
       tMax: temps.length > 1 ? Math.max(...temps) : null,
       code,
+      feels: feelsConsensus(models, tl.times, 2, false)[i],
       wind: mean(at('wind_speed_10m')),
       gust: mean(at('wind_gusts_10m')),
       fzl: mean(at('freezing_level_height')),
@@ -57,6 +59,7 @@ export function NowHero({ models, tl }: Props) {
           </div>
           <div className="truncate text-[12px] text-ink-2">
             {night && w.icon === 'clear' ? 'Clear night' : w.label}
+            {s.feels != null && <span className="tnum"> · feels {num(s.feels)}°</span>}
             {s.tMin != null && s.tMax != null && s.tMax - s.tMin >= 1 && (
               <span className="tnum text-muted"> · {num(s.tMin)}° to {num(s.tMax)}°</span>
             )}

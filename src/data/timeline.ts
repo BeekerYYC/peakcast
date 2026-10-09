@@ -76,3 +76,40 @@ export function accumulate(s: Series): Series {
 export function indexOf(tl: Timeline, t: number): number {
   return Math.max(0, Math.min(tl.times.length - 1, Math.round((t - tl.from) / 3600)))
 }
+
+/**
+ * The part of a timeline between two times (e.g. one local day), for zooming.
+ * Night intervals are clipped to the new window.
+ */
+export function sliceTimeline(tl: Timeline, from: number, to: number): Timeline {
+  const a = Math.max(tl.from, from)
+  const b = Math.min(tl.to, to)
+  const i0 = indexOf(tl, a)
+  const i1 = indexOf(tl, b)
+  return {
+    times: tl.times.slice(i0, i1 + 1),
+    hours: tl.hours.slice(i0, i1 + 1),
+    tz: tl.tz,
+    from: a,
+    to: b,
+    now: tl.now,
+    midnights: tl.midnights.filter((t) => t >= a && t <= b),
+    nights: tl.nights
+      .filter(([s, e]) => e > a && s < b)
+      .map(([s, e]) => [Math.max(s, a), Math.min(e, b)] as [number, number]),
+  }
+}
+
+/** Local day [start, end] around `t`: midnight to the next midnight (clamped to the window). */
+export function dayWindow(tl: Timeline, t: number): [number, number] {
+  let start = tl.from
+  let end = tl.to
+  for (const m of tl.midnights) {
+    if (m <= t) start = m
+    else {
+      end = m
+      break
+    }
+  }
+  return [start, end]
+}
